@@ -1,7 +1,8 @@
 import { BottomPanel } from '@/features/bottom-bar/BottomPanel';
 import { StrategyCanvas } from '@/features/canvas/StrategyCanvas';
 import { CopilotPanel } from '@/features/copilot/CopilotPanel';
-import { ContextBar, TopBar } from './TopBar';
+import { ContextBar } from '@/features/context-bar/ContextBar';
+import { TopBar } from './TopBar';
 
 /**
  * Board "01 · Empty state · chart open" (ST-Main).

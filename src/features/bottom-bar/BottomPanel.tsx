@@ -2,15 +2,19 @@ import { useMemo } from 'react';
 import { Button, IconButton } from '@/components/ui/Button';
 import { CollapseIcon, ExpandIcon } from '@/components/ui/icons';
 import { PriceChart } from '@/features/chart/PriceChart';
-import { generateCandles } from '@/mock/candles';
+import { longLabel } from '@/lib/describeChartData';
+import { generateSeries } from '@/mock/candles';
 import { useWorkspace } from '@/store/workspace';
 
 /** Bottom panel: Chart / Logs tabs + the price chart. Collapsible (board ST-S02). */
 export function BottomPanel() {
-  const { instrument, timeframe, period, bottomTab, setBottomTab, chartCollapsed, toggleChart } =
+  const { instrument, chartData, timeframe, period, bottomTab, setBottomTab, chartCollapsed, toggleChart } =
     useWorkspace();
-  // useMemo = only regenerate candles when instrument or timeframe changes
-  const candles = useMemo(() => generateCandles(instrument, timeframe), [instrument, timeframe]);
+  // useMemo = only regenerate candles when what we plot changes
+  const candles = useMemo(
+    () => generateSeries(instrument, timeframe, chartData),
+    [instrument, timeframe, chartData],
+  );
 
   return (
     <section
@@ -27,7 +31,7 @@ export function BottomPanel() {
           Logs
         </Button>
         <span className="ml-1.5 text-label text-text-tertiary">
-          {instrument} · {timeframe} · {period}
+          {longLabel(chartData, instrument)} · {timeframe} · {period}
         </span>
         <div className="grow" />
         <IconButton aria-label={chartCollapsed ? 'Expand chart' : 'Collapse chart'} onClick={toggleChart}>

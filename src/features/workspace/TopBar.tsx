@@ -1,5 +1,5 @@
 import { Button, IconButton } from '@/components/ui/Button';
-import { FolderIcon, PlayIcon, SettingsIcon } from '@/components/ui/icons';
+import { FolderIcon, PlayIcon } from '@/components/ui/icons';
 import { useWorkspace } from '@/store/workspace';
 
 /** Row 1: strategy name, Save, Period, Run Backtest (56px tall) */
@@ -21,20 +21,5 @@ export function TopBar() {
         Run Backtest <PlayIcon />
       </Button>
     </header>
-  );
-}
-
-/** Row 2: what you trade: instrument, chart data, timeframe (52px tall) */
-export function ContextBar() {
-  const { instrument, chartData, timeframe } = useWorkspace();
-  return (
-    <div className="flex h-contextbar shrink-0 items-center gap-2 border-b border-border-subtle px-5">
-      <Button variant="dropdown">{instrument}</Button>
-      <Button variant="dropdown">{chartData}</Button>
-      <Button variant="dropdown">{timeframe}</Button>
-      <IconButton aria-label="Chart settings" className="!size-control-sm border border-border-control">
-        <SettingsIcon />
-      </IconButton>
-    </div>
   );
 }

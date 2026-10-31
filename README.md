@@ -41,7 +41,7 @@ Stop either one with `Ctrl + C`.
 ## Phases
 
 - **Phase 0** ✅ Repo, tokens, first page live: board *01 · Empty state · chart open* (+ chart collapse, board 02)
-- Phase 1: Context bar dropdowns (instrument, chart data, timeframe) · confirm Copilot purple tokens
+- **Phase 1** ✅ Context bar: Instrument, Chart data (Spot / Option / Perpetual / Synthetic / Combined premium), Timeframe — boards K01–K10
 - Phase 2: Canvas builder by hand (conditions, AND/OR, edit, group, drag)
 - Phase 3: Copilot flow (understood → question → building → applied), edge cases
 - Phase 4: Prove the signals: Update chart, counts, limits, signal log
@@ -50,5 +50,6 @@ Stop either one with `Ctrl + C`.
 ## Design rules carried from the canvas
 
 - Primary blue `#0782DA`, one main action per screen.
+- Copilot / AI uses the same blue family. **No purple** (the canvas boards still show it; code overrides).
 - BUY = green, SELL = red.
 - Same components everywhere; plain language.
