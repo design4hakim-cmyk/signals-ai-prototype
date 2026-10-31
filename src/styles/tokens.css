@@ -1,0 +1,109 @@
+/*
+  ─────────────────────────────────────────────────────────────
+  Signals AI · Design tokens
+  Source: "Signals AI · All flows" canvas (ST-Main, CP-*, K-* boards)
+  ─────────────────────────────────────────────────────────────
+  Think of this file as the Figma Variables panel for the code.
+
+  How it works (Tailwind v4):
+  every token below becomes a class automatically.
+    --color-brand          →  bg-brand, text-brand, border-brand
+    --color-text-secondary →  text-text-secondary
+    --radius-control       →  rounded-control
+    --text-body            →  text-body
+  Change a value here and every screen updates.
+
+  The line `--color-*: initial` removes Tailwind's default palette,
+  so only OUR colours can be used. No stray "blue-500" sneaking in.
+*/
+
+@theme {
+  --color-*: initial;
+
+  /* ── Brand (primary blue, used sparingly: one main action per screen) */
+  --color-brand: #0782da;
+  --color-brand-hover: #066fbb;
+  --color-brand-pressed: #05609f;
+  --color-brand-border: #9cc8ee; /* the + buttons on the canvas */
+  --color-brand-tint: #eaf4fc;
+
+  /* ── Text */
+  --color-text-primary: #1d1f24; /* headings, block labels */
+  --color-text-control: #2b2e34; /* text inside buttons, dropdowns */
+  --color-text-secondary: #4a4f57; /* icons, field labels */
+  --color-text-tertiary: #6b717a; /* meta like "NIFTY · 15m · 1Y" */
+  --color-text-muted: #7d838c; /* helper text, descriptions */
+  --color-text-subtle: #8a9099; /* placeholders, disclaimers */
+  --color-text-on-brand: #ffffff;
+
+  /* ── Surfaces */
+  --color-surface: #ffffff;
+  --color-surface-canvas: #fafbfc; /* dotted strategy canvas */
+  --color-surface-hover: #f7f8fa;
+  --color-surface-selected: #f1f2f4; /* pressed tab, icon hover */
+  --color-surface-chip: #eef0f3; /* operator chips like "crosses above" */
+  --color-surface-disabled: #e9ebee;
+
+  /* ── Borders and lines */
+  --color-border-divider: #ececef; /* panel edges, top bar */
+  --color-border-control: #e4e6ea; /* buttons, dropdowns, blocks */
+  --color-border-chip: #dfe1e5;
+  --color-border-subtle: #f0f1f3; /* list rows, chart frame */
+  --color-line-connector: #c9ced5; /* canvas rail line */
+  --color-line-node: #b9bec6; /* canvas rail dot */
+  --color-canvas-dot: #e2e5e9;
+  --color-chart-grid: #f4f5f7;
+
+  /* ── Disabled primary button (e.g. Run Backtest before a strategy exists) */
+  --color-action-disabled: #d3d7dd;
+
+  /* ── Trading semantics: BUY = green, SELL = red */
+  --color-buy: #22a052;
+  --color-buy-tint: #e8f6ee;
+  --color-sell: #e5484d;
+  --color-sell-tint: #fdecec;
+
+  /* ── Copilot / AI (purple). Border is from the canvas; accent + tint
+        are first guesses, to confirm against the CP- boards in phase 1. */
+  --color-ai-border: #d9d2fb;
+  --color-ai: #7c5cfa;
+  --color-ai-tint: #f4f1fe;
+
+  /* ── Typography */
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --text-caption: 11px; /* disclaimers */
+  --text-caption--line-height: 16px;
+  --text-label: 12px; /* dropdowns, helper text */
+  --text-label--line-height: 16px;
+  --text-chip: 12.5px; /* chips, empty-state copy */
+  --text-chip--line-height: 18px;
+  --text-body: 13px; /* buttons, list items, chat */
+  --text-body--line-height: 19px;
+  --text-body-lg: 14px; /* panel titles */
+  --text-body-lg--line-height: 20px;
+  --text-title: 15px; /* strategy name, Entry / Exit */
+  --text-title--line-height: 20px;
+  --text-display: 22px; /* Copilot greeting */
+  --text-display--line-height: 28px;
+
+  /* ── Radius */
+  --radius-chip: 6px;
+  --radius-control: 8px; /* buttons, dropdowns */
+  --radius-block: 10px; /* condition blocks */
+  --radius-card: 12px; /* Copilot cards, input */
+  --radius-pill: 999px;
+
+  /* ── Layout sizes (fixed parts of the workspace) */
+  --spacing-topbar: 56px;
+  --spacing-contextbar: 52px;
+  --spacing-bottompanel: 340px;
+  --spacing-copilot: 420px;
+  --spacing-control: 36px; /* default button height */
+  --spacing-control-sm: 32px; /* dropdowns */
+  --spacing-control-xs: 28px;
+
+  /* Tailwind still needs a base spacing unit for p-4, gap-2 etc. (4px grid) */
+  --spacing: 4px;
+}
