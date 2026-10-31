@@ -13,9 +13,11 @@ interface PopoverProps {
   children: ReactNode;
   /** px offset from the trigger's left edge (K08 shifts the wide dialog left) */
   offsetX?: number;
+  /** 'right' anchors the panel's right edge to the trigger's (menus near the screen edge) */
+  align?: 'left' | 'right';
 }
 
-export function Popover({ open, onClose, trigger, children, offsetX = 0 }: PopoverProps) {
+export function Popover({ open, onClose, trigger, children, offsetX = 0, align = 'left' }: PopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,7 +38,7 @@ export function Popover({ open, onClose, trigger, children, offsetX = 0 }: Popov
     <div ref={ref} className="relative flex">
       {trigger}
       {open && (
-        <div className="absolute top-10 z-20" style={{ left: offsetX }}>
+        <div className="absolute top-10 z-30" style={align === 'right' ? { right: 0 } : { left: offsetX }}>
           {children}
         </div>
       )}

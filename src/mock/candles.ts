@@ -1,4 +1,4 @@
-import type { Candle, ChartData, Instrument, OptionLeg, Strike, Timeframe } from '@/types/market';
+import type { Candle, ChartData, Instrument, OptionLeg, Period, Strike, Timeframe } from '@/types/market';
 import { kindOf } from './instruments';
 
 /*
@@ -90,12 +90,24 @@ function legPremium(instrument: Instrument, leg: OptionLeg) {
 
 const legKey = (l: OptionLeg) => JSON.stringify(l);
 
+const TRADING_DAYS: Record<Period, number> = { '1M': 21, '3M': 63, '6M': 126, '1Y': 250, '3Y': 750 };
+
+/** How many candles cover the backtest period (capped so the browser stays fast). */
+export function candleCount(instrument: Instrument, timeframe: Timeframe, period: Period) {
+  const crypto = kindOf(instrument) === 'Crypto';
+  const minutesPerDay = crypto ? 1440 : 375; // NSE: 09:15–15:30
+  const days = crypto ? TRADING_DAYS[period] * 1.45 : TRADING_DAYS[period];
+  const perDay = Math.max(1, Math.floor(minutesPerDay / (TF_SECONDS[timeframe] / 60)));
+  return Math.min(12000, Math.max(60, Math.round(days * perDay)));
+}
+
 export function generateSeries(
   instrument: Instrument,
   timeframe: Timeframe,
   chartData: ChartData,
-  count = 300,
+  period: Period = '1Y',
 ): Candle[] {
+  const count = candleCount(instrument, timeframe, period);
   const times = candleTimes(timeframe, count, kindOf(instrument) === 'Crypto');
   const spot = SPOT_PRICE[instrument];
   const base = `${instrument}|${timeframe}|`;

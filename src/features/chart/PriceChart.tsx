@@ -1,17 +1,26 @@
 import { useEffect, useRef } from 'react';
-import { CandlestickSeries, ColorType, createChart, type UTCTimestamp } from 'lightweight-charts';
+import {
+  CandlestickSeries,
+  ColorType,
+  createChart,
+  createSeriesMarkers,
+  type SeriesMarker,
+  type Time,
+  type UTCTimestamp,
+} from 'lightweight-charts';
+import type { Trade } from '@/lib/signals';
 import type { Candle } from '@/types/market';
 
 /*
   TradingView Lightweight Charts wrapped as a React component.
   The library draws on its own <canvas>, so we read our token values
   from CSS and pass them in. Change a token → the chart follows.
+  Entries = green ▲ under the candle, exits = red ▼ above it.
 */
 
-const token = (name: string) =>
-  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-export function PriceChart({ candles }: { candles: Candle[] }) {
+export function PriceChart({ candles, trades }: { candles: Candle[]; trades?: Trade[] }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -20,7 +29,7 @@ export function PriceChart({ candles }: { candles: Candle[] }) {
     const sell = token('--color-sell');
 
     const chart = createChart(ref.current, {
-      autoSize: true, // resizes with the panel
+      autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: token('--color-surface') },
         textColor: token('--color-text-tertiary'),
@@ -28,10 +37,7 @@ export function PriceChart({ candles }: { candles: Candle[] }) {
         fontSize: 11,
         attributionLogo: false,
       },
-      grid: {
-        vertLines: { visible: false },
-        horzLines: { color: token('--color-chart-grid') },
-      },
+      grid: { vertLines: { visible: false }, horzLines: { color: token('--color-chart-grid') } },
       rightPriceScale: { borderColor: token('--color-border-subtle') },
       timeScale: { borderColor: token('--color-border-subtle'), timeVisible: true, barSpacing: 10 },
       crosshair: { mode: 0 },
@@ -45,10 +51,21 @@ export function PriceChart({ candles }: { candles: Candle[] }) {
       borderVisible: false,
     });
     series.setData(candles.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
-    chart.timeScale().scrollToRealTime(); // show the latest candles, like the design
 
-    return () => chart.remove(); // clean up when the component goes away
-  }, [candles]);
+    if (trades?.length) {
+      const markers: SeriesMarker<Time>[] = [];
+      for (const t of trades) {
+        markers.push({ time: t.entryTime as UTCTimestamp, position: 'belowBar', color: buy, shape: 'arrowUp', size: 0.8 });
+        if (t.exitTime !== null)
+          markers.push({ time: t.exitTime as UTCTimestamp, position: 'aboveBar', color: sell, shape: 'arrowDown', size: 0.8 });
+      }
+      markers.sort((a, b) => (a.time as number) - (b.time as number));
+      createSeriesMarkers(series, markers);
+    }
+
+    chart.timeScale().scrollToRealTime();
+    return () => chart.remove();
+  }, [candles, trades]);
 
   return <div ref={ref} className="h-full w-full" />;
 }

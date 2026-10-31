@@ -42,10 +42,15 @@ Stop either one with `Ctrl + C`.
 
 - **Phase 0** ✅ Repo, tokens, first page live: board *01 · Empty state · chart open* (+ chart collapse, board 02)
 - **Phase 1** ✅ Context bar: Instrument, Chart data (Spot / Option / Perpetual / Synthetic / Combined premium), Timeframe — boards K01–K10
+- **Phase 1.5** ✅ Top nav (zones, save/rename, ⋯, mode switch, period, running trades, trade dialogs) · Bottom bar (chart/signals, Update chart, log, limits, all states) · Backtest setup block (5 layers, states, popovers)
 - Phase 2: Canvas builder by hand (conditions, AND/OR, edit, group, drag)
 - Phase 3: Copilot flow (understood → question → building → applied), edge cases
 - Phase 4: Prove the signals: Update chart, counts, limits, signal log
 - Phase 5: Backtest + setup tabs · Phase 6: Forward test / Live · Phase 7: My Strategies
+
+## Reviewing states: the ◐ Scenarios button
+
+Top right of the Copilot header (prototype only). It jumps the app into states from the component sheets: Top nav A–K, Bottom bar 1–9, Setup block 1–9. It exists because the canvas builder isn't coded yet.
 
 ## Design rules carried from the canvas
 
