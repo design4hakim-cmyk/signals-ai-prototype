@@ -65,6 +65,7 @@ src/
 - Perpetual Future is crypto-only (disabled for indices with "Only for crypto").
 - Mock data is seeded: same inputs → same chart and results.
 - Every canvas edit goes through `commit` in `store/canvas.ts`: one change on Update chart, Saved → edited, ran setups outdated, Undo kept. A new block counts as ONE change however many slots you fill.
+- Canvas camera and frames are layout only (never a change): zoom/pan in `features/canvas/useViewport.ts`, Entry/Exit frame positions and selection in `store/canvas.ts`. Tree changes glide via `data-flip` + `useSmartAnimate.ts`; tag new movable rows with `data-flip`.
 - The chart and counts use `useCanvas().applied` (the conditions at the last Update chart), never the live canvas.
 - Add new review states to `features/scenarios/ScenarioPanel.tsx` so reviewers can jump straight to them.
 

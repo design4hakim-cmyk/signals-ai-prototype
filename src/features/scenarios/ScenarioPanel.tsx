@@ -78,6 +78,15 @@ const GROUPS: { title: string; items: [string, () => void][] }[] = [
     ],
   },
   {
+    title: 'Canvas · zoom, select, move',
+    items: [
+      ['Z1 · Big strategy, zoomed out to 50%', () => { withStrategy(complexStrategy()); C().setView({ x: 0, y: 0, zoom: 0.5 }); }],
+      ['Z2 · Entry frame selected (drag title / arrows)', () => { withStrategy(); C().selectFrame('entry'); }],
+      ['Z3 · Group selected (drag, or ↑ ↓)', () => { withStrategy(groupedStrategy()); C().selectOnly([C().entry.children[2].id]); }],
+      ['Z4 · Block selected (drag, or ↑ ↓)', () => { withStrategy(editingStrategy()); C().selectOnly([nth('entry', 2)]); }],
+    ],
+  },
+  {
     title: 'Top nav · through the flow',
     items: [
       ['A · New, empty', resetAll],
