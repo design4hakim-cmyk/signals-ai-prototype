@@ -36,7 +36,7 @@ Canvas artifact **"Signals AI · All flows"**: https://claude.ai/artifact/6vqCnc
 - Fonts: IBM Plex Sans (UI), JetBrains Mono (code).
 
 ## Stack
-React 19 + TypeScript + Vite · Tailwind v4 · Zustand · TradingView Lightweight Charts v5 · dnd-kit (canvas builder, upcoming) · Storybook 10 · oxlint.
+React 19 + TypeScript + Vite · Tailwind v4 · Zustand · TradingView Lightweight Charts v5 · dnd-kit (canvas drag and drop) · Storybook 10 · oxlint.
 
 ## Where things live
 ```
@@ -46,15 +46,15 @@ src/
   features/
     top-nav/               TopNav-Components sheet
     context-bar/           K01–K10 (instrument, chart data dialog, timeframe)
-    canvas/                strategy canvas (static preview until the builder phase)
+    canvas/                canvas builder: blocks, AND/OR tree, menus, drag and drop (B02–B08, E01–E09)
     bottom-bar/            K11–K12 (chart/signals tabs, update chart, log, limits)
     chart/PriceChart.tsx   Lightweight Charts wrapper (+ entry/exit markers)
     backtest/              SetupBlock-Unified sheet
     copilot/               Copilot panel
     scenarios/             ◐ Scenarios switcher. PROTOTYPE ONLY review helper
-  store/                   Zustand stores: workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups)
-  mock/                    dummy data: seeded candles, instruments, Copilot starters
-  lib/                     pure logic: signals (EMA 9×21 + limits), describeChartData
+  store/                   Zustand stores: canvas (conditions, selection, undo), workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups)
+  mock/                    dummy data: seeded candles, instruments, example strategies, Copilot starters
+  lib/                     pure logic: indicators (maths + labels), conditions (tree edits), signals (evaluates the tree + limits), describeChartData
 ```
 
 ## Behaviour already decided (keep consistent)
@@ -64,7 +64,9 @@ src/
 - Run status and saved status never share a button (Run lives in the tab row, Save/Update setup in the header).
 - Perpetual Future is crypto-only (disabled for indices with "Only for crypto").
 - Mock data is seeded: same inputs → same chart and results.
-- Add new review states to `features/scenarios/ScenarioPanel.tsx`, since many states can't be reached by clicking until the canvas builder exists.
+- Every canvas edit goes through `commit` in `store/canvas.ts`: one change on Update chart, Saved → edited, ran setups outdated, Undo kept. A new block counts as ONE change however many slots you fill.
+- The chart and counts use `useCanvas().applied` (the conditions at the last Update chart), never the live canvas.
+- Add new review states to `features/scenarios/ScenarioPanel.tsx` so reviewers can jump straight to them.
 
 ## Workflow
 1. Never commit to `main` directly. Create a branch (lowercase-with-hyphens, e.g. `phase-2-canvas-builder`), or keep adding to the open review branch if Hakim says so.
@@ -88,7 +90,7 @@ npx oxlint src         # lint
 - ✅ 0 · Setup, tokens, first page (ST-Main)
 - ✅ 1 · Context bar (K01–K10)
 - ✅ 1.5 · Top nav, bottom bar, backtest setup block (component sheets)
-- ⬜ 2 · Canvas builder by hand (B02–B08, E01–E09: conditions, AND/OR, edit, group, drag with dnd-kit)
+- ✅ 2 · Canvas builder by hand (B02–B08, E01–E09: conditions, AND/OR, edit, group, drag with dnd-kit)
 - ⬜ 3 · Copilot flow (CP-*: understood → question → building → applied; refine; edge cases)
 - ⬜ 4 · Pine Script panel (PN-*: errors fixed in place)
 - ⬜ 5 · Update chart flow polish (U01–U06)
