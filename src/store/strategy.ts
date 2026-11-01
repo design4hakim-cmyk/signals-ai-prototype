@@ -36,7 +36,7 @@ interface StrategyState {
   save: (name?: string) => void; // first save (with name) or Update
   rename: (name: string) => void;
   discard: () => void;
-  edit: (description: string) => void; // any change on Build
+  edit: (description: string, changes?: number) => void; // any change on Build (0 = refines one already counted)
   setMode: (m: 'build' | 'backtest') => void;
   showToast: (t: string) => void;
   set: (patch: Partial<StrategyState>) => void;
@@ -72,10 +72,10 @@ export const useStrategy = create<StrategyState>((set, get) => ({
     get().showToast('Back to the last saved version');
   },
 
-  edit: (description) => {
+  edit: (description, changes = 1) => {
     const s = get();
     set({ dirty: s.saved ? true : s.dirty });
-    useWorkspace.getState().strategyEdited();
+    useWorkspace.getState().strategyEdited(changes);
     useBacktest.getState().strategyChanged(description);
   },
 
