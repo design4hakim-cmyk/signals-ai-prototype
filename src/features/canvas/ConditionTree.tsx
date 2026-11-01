@@ -37,7 +37,7 @@ export function GroupChildren({ group, side, root, insideDragged }: { group: Gro
       {group.children.map((ch, i) => (
         <Fragment key={ch.id}>
           <DropSlot parentId={group.id} index={i} edge={i === 0} disabled={lockDrops} />
-          <div className="flex items-center">
+          <div data-flip={ch.id} className="flex items-center">
             {many && <span className="h-px w-[22px] shrink-0 bg-line-connector" />}
             {ch.kind === 'cond' ? (
               <ConditionBlock cond={ch} />
@@ -54,7 +54,9 @@ export function GroupChildren({ group, side, root, insideDragged }: { group: Gro
   if (!many) return rows;
   return (
     <div className="flex items-center">
-      <LogicButton group={group} />
+      <span data-flip={`logic:${group.id}`} className="flex">
+        <LogicButton group={group} />
+      </span>
       <span className={`h-px shrink-0 bg-line-connector ${root ? 'w-[44px]' : 'w-[28px]'}`} />
       {rows}
     </div>
@@ -95,7 +97,8 @@ function LogicButton({ group }: { group: Group }) {
 /** A dashed ANY OF / ALL OF box (B08, E07). Its label opens the group menu (E08). */
 function GroupBox({ group, side, insideDragged }: { group: Group; side: Side; insideDragged?: boolean }) {
   const editor = useCanvas((s) => s.editor);
-  const { openEditor, closeEditor, setLogic, addCondition, ungroup, remove } = useCanvas.getState();
+  const selected = useCanvas((s) => s.selected.includes(group.id));
+  const { openEditor, closeEditor, setLogic, addCondition, ungroup, remove, selectOnly, toggleSelect } = useCanvas.getState();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: group.id });
   const { over, active } = useDndContext();
   const { setNodeRef: setBoxRef } = useDroppable({ id: `box:${group.id}`, data: { parentId: group.id, index: group.children.length } satisfies DropTarget, disabled: insideDragged || !active });
@@ -115,8 +118,24 @@ function GroupBox({ group, side, insideDragged }: { group: Group; side: Side; in
       </button>
       <div
         ref={setBoxRef}
-        className={`relative rounded-dialog pt-5 pr-4 pb-3.5 pl-3 ${
-          target ? 'border-[1.5px] border-dashed border-brand bg-drop-tint' : 'border border-dashed border-border-group bg-surface-group'
+        data-group-box={group.id}
+        // a click on the box itself (its padding), not on a block inside, selects the whole group
+        onClick={(e) => {
+          const t = e.target as HTMLElement;
+          if (t.closest('[data-group-box]')?.getAttribute('data-group-box') !== group.id || t.closest('button,[data-condition]')) return;
+          if (e.shiftKey) toggleSelect(group.id);
+          else selectOnly([group.id]);
+        }}
+        onPointerDown={(e) => {
+          const t = e.target as HTMLElement;
+          if (t.closest('[data-group-box]')?.getAttribute('data-group-box') === group.id && !t.closest('button,[data-condition]')) listeners?.onPointerDown?.(e);
+        }}
+        className={`relative rounded-dialog pt-5 pr-4 pb-3.5 pl-3 transition-[border-color,background-color,box-shadow] duration-150 ${
+          target
+            ? 'border-[1.5px] border-dashed border-brand bg-drop-tint'
+            : selected
+              ? 'border-[1.5px] border-solid border-brand bg-surface-group shadow-focus'
+              : 'border border-dashed border-border-group bg-surface-group hover:border-border-strong'
         }`}
       >
         <div className="absolute -top-[11px] left-3">
@@ -151,19 +170,20 @@ function GroupBox({ group, side, insideDragged }: { group: Group; side: Side; in
   );
 }
 
-/** The gap between two rows. Opens into "Drop here" when a dragged block hovers it. */
+/** The gap between two rows. Glides open into "Drop here" when a dragged block hovers it. */
 function DropSlot({ parentId, index, edge, disabled }: DropTarget & { edge?: boolean; disabled?: boolean }) {
   const { active } = useDndContext();
   const { setNodeRef, isOver } = useDroppable({ id: `slot:${parentId}:${index}`, data: { parentId, index } satisfies DropTarget, disabled: disabled || !active });
-  if (isOver)
-    return (
-      <div ref={setNodeRef} className="flex items-center py-1.5">
+  // edges collapse when nothing is being dragged, so the tree stays tight
+  const height = isOver ? 54 : active || !edge ? 14 : 0;
+  return (
+    <div ref={setNodeRef} style={{ height }} className="relative transition-[height] duration-200 ease-[cubic-bezier(0.2,0,0,1)]">
+      <div className={`absolute inset-y-[7px] left-0 flex items-center transition-opacity duration-150 ${isOver ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
         <span className="h-px w-[22px] shrink-0 bg-line-connector" />
         <div className="flex h-10 w-[330px] items-center justify-center rounded-block border-[1.5px] border-dashed border-brand bg-drop-tint text-chip font-medium text-brand-text">
           Drop here
         </div>
       </div>
-    );
-  // edges collapse when nothing is being dragged, so the tree stays tight
-  return <div ref={setNodeRef} className={active ? 'h-3.5' : edge ? 'h-0' : 'h-3.5'} />;
+    </div>
+  );
 }
