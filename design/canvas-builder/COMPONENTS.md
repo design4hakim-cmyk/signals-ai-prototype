@@ -1,203 +1,210 @@
 # Canvas builder · component spec
 
-Source of truth: `reference/atoms.jpg` and `reference/behaviour.jpg` (also the `.html` versions of the same boards).
-Values live in `src/styles/tokens.css` (the repo's single token file). `atom-states.ts` here shows the state logic for the field atoms; when you build, move its colours into `tokens.css` and read them from there. Never hard-code a hex in a component.
+The source of truth is the four canvas boards in `reference/`. Each comes as `.html` (open it in a browser) and as `.jpg`.
 
-### Token names in this spec → the repo
-The spec uses short names. Use the existing repo token where one exists; add the rest to `tokens.css` first.
-
-| Spec name | Value | Repo token |
-|---|---|---|
-| `--blue-500` | #0782DA | `--color-brand` (exists) |
-| `--blue-600` | #0567AD | `--color-brand-hover` (exists, #066fbb; keep the repo value) |
-| `--blue-wash` | #F4F8FD | `--color-brand-tint` (exists) |
-| `--blue-10` | #E6F3FB | **add** `--color-atom-hover`: hover fill for every field atom |
-| `--blue-menu-current` | #EEF5FC | **add** `--color-menu-current` |
-| `--chip-grey` | #F1F2F4 | `--color-surface-selected` (exists). Connector chips at rest; replaces `--color-surface-chip` on the canvas |
-| `--text` / `--text-sub` / `--text-muted` / `--text-placeholder` / `--text-faint` | | `--color-text-primary` / `-secondary` / `-tertiary` / `-subtle` / `--color-text-disabled` |
-| `--border-card` | #E4E6EA | `--color-border-control` |
-| `--border-button` | #DFE1E5 | `--color-border-chip` |
-| `--border-dashed` | #B3B8BF | **add** `--color-border-empty` |
-| `--group-edge` | #C3C8CF | `--color-border-radio` (same value) or **add** `--color-group-edge` |
-| `--group-bg` | #FCFCFD | **add** `--color-group-bg` |
-| `--rail` | #C9CED5 | `--color-line-connector` |
-| `--error-bg` / `--error-border` / `--error-text` | #FDF4F4 / #E5A3A0 / #B42318 | **add** `--color-error-tint` / `--color-error-border` / `--color-error-text` (check for existing ones first) |
-| `--ai`, `--ai-border`, `--ai-tint` | purple on the canvas | **use the repo's blue `--color-ai-*` tokens. No purple anywhere.** |
-| `--focus-ring` | 0 0 0 3px rgba(7,130,218,.15) | **add** as a shadow token |
-| `--popover-shadow` | 0 12px 32px rgba(20,22,28,.14) | use the existing popover shadow if there is one, else **add** |
+| File | Contents |
+|---|---|
+| `builder-atoms.html` | 0 What changed · 1 Foundations · 2 Field atoms · 3 Inputs, menus and controls |
+| `builder-atoms-2.html` | 4 Condition block · 5 Logic and groups · 6 Section shell · 7 Editor vs Preview |
+| `builder-behaviour.html` | 1 Popovers and menus · 2 Behaviour sequences |
+| `builder-behaviour-2.html` | 3 Edge cases |
 
 One component set serves both **Entry** and **Exit**.
 
 ---
 
-## 1. Field atoms
+## 0. The model: two layers
 
-Every atom shares the same base look:
+Every canvas element is drawn in two layers. Keep them separate in code.
 
-- **Size:** height 28, radius 6, padding 0 8.
-- **Icon-only atoms:** 28 × 28.
-- **Type:** 13px / 500. Indicator settings (e.g. "(9, Close)") are 13px / 400 in `--text-placeholder`.
-- **Gap inside a block:** 6.
+1. **Its own look (the semantic layer).** This is the element's fill, border and text, and it depends only on what the element *is*:
+   - normal grey
+   - red error
+   - violet Copilot
+   - dashed empty
+   - read-only
+   - disabled
 
-There are two families. They differ only at rest.
+   It never changes because of hover, press, selection or focus.
+2. **The editor layer (Figma-like).** These are blue rings drawn **outside** the element's border, as a `box-shadow` (or an `outline` for drop targets).
+   - They show interaction only: hover, pressed, selected, focused, drop target, dragging.
+   - They exist only in **Editor mode**.
 
-| Family | Atoms | Default (at rest) |
+### Editor-layer tokens (only existing colours)
+
+| State | Treatment | Rule |
 |---|---|---|
-| `operand` | Indicator (name + settings), Value | No fill, no border; sits flat on the block |
-| `connector` | Relation, Arithmetic, Logic node, Timing chip | Grey box `--chip-grey` |
+| Hover | `box-shadow: 0 0 0 1px #9CC8EE` | Temporary. Interactive canvas elements only, never static text. |
+| Pressed | `0 0 0 1px #0782DA` | Only while the pointer is down. |
+| Selected | `0 0 0 2px #0782DA` | Persists after the pointer leaves. Strongest. |
+| Focused | `0 0 0 (w+2)px #fff, 0 0 0 (w+4)px #0782DA` | Keyboard focus. `w` = width of any inner ring, so focus always sits outside it. |
+| Selected + focused | `0 0 0 2px #0782DA, 0 0 0 4px #fff, 0 0 0 6px #0782DA` | Both visible. |
+| Drop target | `outline: 1.5px dashed #0782DA; outline-offset: 3px` + fill `#F4F8FD` | Dashed, so it never reads as selected. |
+| Invalid drop | `outline: 1.5px dashed #B42318; outline-offset: 3px` + fill `#FDF4F4` + the reason in words | |
+| Dragging | selected ring + `0 12px 28px rgba(20,22,28,.18)` + `rotate(-1.2deg)` | The source stays behind: opacity .5, dashed `#B3B8BF` border, no ring. |
 
-All other states are shared by both families:
+Suggested implementation: a single `editorRing({ inter: 'default'|'hover'|'pressed', selected, focused, lifted })` helper that returns the box-shadow string. Components never compute rings themselves.
 
-| State | Surface | Border | Text | Ring |
-|---|---|---|---|---|
-| hover | `--blue-10` (#E6F3FB) | none (same as fill) | `--text` | – |
-| open (focused = pressed = menu open) | white | 1px `--blue-500` | `--text` | `--focus-ring` |
-| empty | white | 1px dashed `--border-dashed` | `--text-placeholder` | – |
-| empty · focused | white | 1px `--blue-500` | `--text-placeholder` | `--focus-ring` |
-| error | `--error-bg` | 1px `--error-border` | `--error-text` | – |
-| disabled | operand: none · connector: `--chip-disabled` | none | `--text-faint` | – |
+### Precedence
+1. **Disabled** overrides everything: no editor layer, no hover, no press, `cursor: not-allowed`.
+2. **Semantic styling always shows**: the red, violet, dashed or grey stays under every ring.
+3. Only one inner ring at a time: **selected > pressed > hover**. **Focus** is added outside it, independently.
+4. **Hover** marks only the innermost element under the pointer.
+5. **Selection** belongs to one element. It never spreads to children (group → blocks) or parents (block → group → section).
+6. **Drop target** (dashed) and **selected** (solid) never look the same. The dragged copy and its source never look the same.
+7. **Copilot provenance** (✦ badge + violet) stays visible in every editor state.
 
-Exception: the Indicator atom's **empty** state in the field-atoms matrix has no border (designer's choice).
+### Editor vs Preview mode
 
-**Rules**
+| | Editor | Preview |
+|---|---|---|
+| Editor rings (hover, pressed, selected, focus) | shown | hidden |
+| Checkbox, ⋯, drag handle ⋮⋮, + add | shown | hidden |
+| Drop targets and drag feedback | shown | hidden |
+| Changed-since-update dot | shown | hidden |
+| Error, disabled, empty, values | shown | shown |
+| Copilot ✦ and violet | shown | shown |
 
-- **Text never truncates.** A long condition wraps inside its block.
-- **Labels:**
-  - Empty labels: "Indicator", "Relation", "Value", "Pick logic".
-  - Error labels: "Pick indicator", "Pick relation".
-- **Applied arithmetic** shows as a connector chip after the operand, e.g. `× 1.5`.
-- **Logic node:** shows a chevron and holds one of `All of` · `Any of` · `None of`. Never AND / OR.
-- **Timing chip:** `On candle close` or `During the candle`, with a chevron.
+### Colour meaning
 
-## 2. Condition block
-
-A white card holding the atoms.
-
-- **Card:** 1px `--border-card`, radius 10, padding 6, gap 6. It wraps rather than truncating.
-- **Layout on hover:** `[☐ checkbox]` · atoms · `[⋯]` · `[⋮⋮ drag handle]`.
-  - The checkbox sits at the **start**.
-  - The handle sits at the **far right**, after ⋯, so it never touches the rail connector on the left.
-- **Only the innermost item under the pointer shows hover.** Hovering a block inside a group does not hover the group.
-
-| State | Border | Background | Extra |
-|---|---|---|---|
-| default | `--border-card` | white | – |
-| hover | `--blue-500` | white | checkbox (empty), ⋯, ⋮⋮ |
-| ⋯ open | `--blue-500` | white | ⋯ in open state + menu |
-| editing (a field is open) | `--blue-500` + ring | white | – |
-| selected | `--blue-500` + ring | `--blue-wash` | checkbox ticked |
-| can join selection | `--border-card` | white | empty checkbox shown without hover |
-| can join · hover | `--blue-500` | white | empty checkbox |
-| can't join (other level) | `--border-card` | white | opacity 0.45, no checkbox |
-| incomplete (after leaving it) | `--error-border` | white | message under it: "Finish this condition to update the chart" |
-| added by Copilot | `--color-ai-border` + blue ring (no purple) | white | ✦ badge top-left in `--color-ai-badge` |
-| changed since last update | `--border-card` | white | 8px blue dot top-right |
-| drag origin | 1px dashed blue | #F7F8FA | opacity 0.5 |
-| dragging | `--blue-500` | white | shadow + rotate −1.2° |
-
-## 3. Groups and logic
-
-- **One logic node per group,** sitting on the group's top edge. Nothing is repeated between the conditions inside.
-- **Section root:**
-  - With 2 or more conditions, the section starts with its own logic node at the top of the rail.
-  - With 1 condition there is no node.
-- **Max nesting is 2 levels.** A deeper drop is refused, with the reason: "Groups go 2 levels deep. Drop it next to the group instead."
-- **A group left with 1 condition dissolves.** The condition moves up to the parent.
-- **Group box:** radius 12, padding 24 16 10 14. Children hang off a vertical rail (1px `--rail`) with 18px horizontal connectors.
-
-| Group state | Edge | Background | Top edge shows |
-|---|---|---|---|
-| default | 1px dashed `--group-edge` | `--group-bg` | logic node |
-| hover | 1px `--blue-500` | `--blue-wash` | left: ☐ + node (hover) · right: ⋯ + ⋮⋮ |
-| logic menu open | 1px `--blue-500` + ring | `--blue-wash` | node open, ⋯ |
-| selected | 1px `--blue-500` + ring | `--blue-wash` | ☑ + node |
-| can join selection | dashed default | `--group-bg` | ☐ + node |
-| drop target | 1.5px dashed `--blue-500` | blue 6% | node; empty group says "Drop a condition here" |
-
-## 4. Controls
-
-- **Add (small):**
-  - 22px circle with a 1px blue border, white, blue "+". It sits at the end of a rail.
-  - On hover it fills blue with a white "+".
-- **Add (big):** "+ Add Entry Condition" / "+ Add Exit Condition".
-  - Filled blue, height 36, radius 8, hover `--blue-600`.
-  - Shown only when a section is empty.
-- **⋯ button:** 26 × 26, radius 6. Default is white with a `--border-card` border; hover and open as in the atoms board.
-- **Checkbox:** 16 × 16, radius 4.
-  - Off: 1.5px `--border-dashed`.
-  - On: filled `--blue-500` with a white ✓.
-- **Drag handle ⋮⋮:** 14 × 24, `--text-placeholder`. Hover background `--chip-grey`.
-
-## 5. Popovers and menus
-
-- **Surface:** white, 1px `--border-card`, radius 10, `--popover-shadow`, padding 6.
-- **Rows:** 32px tall, radius 6.
-  - Hover: `--chip-grey`.
-  - Current: `--blue-menu-current`, blue text and ✓.
-  - Destructive rows use `--error-text`.
-  - Keyboard hints sit right-aligned in `--text-placeholder`.
-
-| Popover | Contents |
+| Colour | Meaning |
 |---|---|
-| Indicator picker (300w) | Focused search · tabs All / Favourites / Trend / Momentum / Volume · "Favourites & recent" list with ★ · current indicator has ✓ · no-results message suggests a short name or Copilot |
-| Indicator settings (270w) | Title "EMA · settings" + ✕ · Length / Source / Offset · changes apply as you type · an invalid value shows the reason in red and keeps the last good value |
-| Relation (240w) | COMPARE: Greater Than, Greater Than or Equal, Less Than, Less Than or Equal, Equals, Not Equal · CROSS: Cross Above, Cross Below |
-| Arithmetic (260w) | Title "Maths on SMA (Volume, 20)" · + − × ÷ · "By [1.5]" · Remove maths (red link) |
-| Logic node (240w) | All of (Every condition is true) · Any of (At least one is true) · None of (No condition is true). Logic only; group actions are in the group's ⋯ |
-| ⋯ on a block (230w) | Duplicate ⌘D · Add condition below · Copy as text ⌘C · — · Delete ⌫ (red) |
-| ⋯ on a group (250w) | Add condition to group · Duplicate group ⌘D · Ungroup ("Conditions move up a level") · — · Delete group ⌫ (red, "Deletes its conditions too · Undo") |
-| Timing chip (280w) | On candle close ("Checks once each candle finishes") · During the candle ("Checks on every price update; more signals, more noise") |
+| **Blue** `#0782DA` / `#9CC8EE` | Editor layer only. |
+| **Grey** | Structure: surfaces, edges, connector chips, menu-row hover. |
+| **Violet** `#6E56CF` / `#B9A8F7` / `#EFEAFF` | Copilot provenance only. Never hover or focus. |
+| **Red** `#B42318` / `#FDF4F4` | Errors and destructive actions. Always with an icon and a message. |
+| **Green** `#2F8A4E` / `#EAF6EE` | Success. |
+| **Yellow** `#F0B429` | The ★ favourite. |
 
-## 6. Behaviour
+---
 
-**Add a condition**
-1. Click + on the rail.
-2. A new block appears in edit state, and the indicator picker opens on its own.
-3. Pick the indicator; the relation picker opens next.
-4. Pick the relation; then fill in the value or the second indicator.
-5. When the block is complete, the chart pauses and "Update chart · N changes" shows.
+## 1. Field atoms (own look)
 
-**Switch or edit**
-- Click the indicator name to switch it (picker, current ✓).
-- Click the grey settings to edit them.
-- The block keeps its place.
+- **Size:** height 28, radius 6, padding 0 8. Icon atoms are 28 × 28.
+- **Type:** 13px / 500. Settings such as "(9, Close)" are 13px / 400 `#8A9099`.
+- **Text never truncates.** Long blocks wrap.
 
-**Delete**
-- Instant, with no confirm.
-- A toast "Deleted RSI (14) Greater Than 50 · Undo" stays for 8 seconds.
+| Atom family | At rest |
+|---|---|
+| Operand (indicator), Value | No fill, transparent border |
+| Relation, Arithmetic, Logic node, Timing chip | Grey box `#F1F2F4` |
 
-**Select and group** (no hidden menu)
-1. Hovering a block shows its checkbox.
-2. Ticking one block shows the checkbox on **every block or group that can join it**: the siblings at the same level, in the same parent. Everything else dims to 0.45.
-3. The selection bar appears at the bottom of the canvas. It's white, never dark: `N selected · Group as [All of][Any of][None of] · Duplicate · Delete · ✕`.
-4. With 1 ticked, the Group-as chips are disabled and the bar says "Tick one more to group".
-5. Grouping makes a new group with the chosen logic, and a toast offers Undo.
-6. Esc or ✕ clears the selection. Space ticks the focused block.
-7. A sibling group that would end up 3 levels deep stays dimmed, with the reason on hover.
+| Semantic look | Fill | Border | Text |
+|---|---|---|---|
+| Normal | per family | per family | `#1D1F24` |
+| Empty | `#FFF` | 1px dashed `#B3B8BF` | `#8A9099`, e.g. "Indicator", "Relation", "Value" |
+| Error | `#FDF4F4` | 1px `#B42318` | `#B42318` + error icon, e.g. "Pick indicator" |
+| Read-only | `#FAFBFC` | 1px `#E4E6EA` | `#1D1F24` · focusable, never selected |
+| Disabled | `#F7F8FA` | 1px `#ECECEF` | `#A1A6AD` · no editor layer |
 
-**Change the logic**
-- One click on the node opens the logic menu.
-- The group's contents don't move.
+**Editor states:** default · hover · pressed · selected (its popover is open) · focused · selected + focused. Each is the matching ring from section 0.
 
-**Drag**
-- Only by ⋮⋮.
-- The source becomes a ghost, and the target group gets the drop-target state.
-- A 2px blue line with a dot marks the insert position.
+## 2. Inputs (inside popovers)
 
-**Copilot blocks**
-- ✦ stays until the user edits the block; then it becomes a normal block.
+| State | Look |
+|---|---|
+| Default / filled | White, 1px `#E4E6EA`. |
+| Hover | + hover ring. |
+| Focused | + focus ring. |
+| Error | `#FDF4F4`, 1px `#B42318`, red text, and a message under the field. It stays while focused. |
+| Disabled | `#F7F8FA`, `#ECECEF`, faint text. |
+| Read-only | `#FAFBFC`, and focusable. |
 
-**Half-built block**
-- Clicking away keeps the block.
-- The missing field gets the error state, and Update chart is off until it's filled.
+The error sits on the field, never on the whole popover.
 
-**Keyboard**
-- Popovers: type to search, ↑ ↓ to move, Enter to pick, Esc to close.
-- Tab moves to the next field. ⌘D duplicates, ⌘C copies as text, ⌫ deletes.
+## 3. Menus and popovers
 
-## 7. Section shell
+- **Surface:** white, 1px `#E4E6EA`, radius 10, shadow `0 12px 32px rgba(20,22,28,.14)`.
+- **Rows:**
 
-- **Header:** "Entry" with "When your strategy should enter a position", or "Exit" with "When your strategy should exit".
-- **Under the header:** "Check [timing chip]".
-- **Empty section:** a root dot, the rail, and the big add button.
-- **Canvas background:** `--bg-canvas` with a 16px dot grid (#E2E5E9). It scrolls; the tree grows downward.
+  | Row state | Look |
+  |---|---|
+  | Hover | `#F1F2F4` |
+  | Pressed | `#E9EBEE` |
+  | Keyboard active | `inset 0 0 0 2px #0782DA` |
+  | Current | `#EEF5FC` fill, `#0A5FA3` text, ✓ |
+  | Disabled | `#A1A6AD`, no hover |
+  | Destructive | Red text always; hover `#FDF4F4`; pressed `#FBECEB` |
+
+- **Indicator picker:**
+  - Search input has the focus ring while open.
+  - Search matches are shown in **bold**, never with a blue fill.
+  - ★ favourite is independent of the current ✓.
+
+Contents of each popover:
+- **Relation:** Compare / Cross groups.
+- **Arithmetic:** + − × ÷, "By".
+- **Logic node:** All of / Any of / None of only. Group actions live in the group's ⋯.
+- **Block ⋯:** Duplicate ⌘D · Add condition below · Copy as text ⌘C · Delete ⌫.
+- **Group ⋯:** Add condition to group · Duplicate group · Ungroup · Delete group.
+- **Timing:** On candle close / During the candle.
+
+## 4. Buttons and icon controls (app chrome: keep their own fills, plus the focus ring)
+
+| Control | Default | Hover | Pressed | Disabled | Other |
+|---|---|---|---|---|---|
+| Primary | `#0782DA` | `#066FBB` | `#05609F` | `#E9EBEE` / faint text | Loading = spinner |
+| Secondary | white, `#DFE1E5` | `#F7F8FA`, `#B9C0C9` | `#E9EBEE` | | |
+| Tertiary | blue text | `#F4F8FD` | `#E6F3FB` | | |
+| Destructive | red text, white | `#FDF4F4` | `#FBECEB` | | |
+| **+ on the rail** | **solid `#0782DA`, 28px circle, white +, shadow `0 2px 6px rgba(7,130,218,.25)`**, centred on the rail line | `#066FBB` | `#05609F` | grey | |
+| ⋯ | white, `#E4E6EA` | `#F1F2F4` | `#E9EBEE` | | Open = `#E6F3FB` + blue border |
+| ⋮⋮ handle | `#8A9099` | on `#F1F2F4` | | no grab cursor | Dragging = blue on `#E6F3FB` |
+| Checkbox | 16px | | | muted | Off, off-hover, focused, on, on-hover, indeterminate, disabled off/on |
+
+The big "+ Add Entry/Exit Condition" button is a Primary button.
+
+## 5. Condition block
+
+- **Own look:** white card, 1px `#E4E6EA`, radius 10, padding 6, gap 6.
+  - Copilot = `#EFEAFF` fill, 1px `#B9A8F7` border, ✦ badge.
+  - Error = `#FDF4F4` fill, 1px `#B42318` border, plus the message under the block.
+  - Disabled = `#F7F8FA` fill, `#ECECEF` border.
+  - Changed = a blue 8px dot, top right (editor only).
+- **Editor layer:** the rings from section 0. The state matrix is in `builder-atoms-2`: every own look × every editor state.
+- **Controls on hover or selection:**
+  - ☐ checkbox at the start.
+  - ⋯ then ⋮⋮ at the **far right**.
+- **Editing a field:** only that field gets the selected ring; the block does not change.
+
+## 6. Groups and logic
+
+- **Logic words:** All of / Any of / None of. One node per group, on the group's top edge.
+- **Section root:** gets a node only with 2+ conditions.
+- **Max nesting is 2 levels.** A group can't be dropped into a level-2 group (invalid drop, with the reason). A single condition can.
+- **A group left with 1 condition dissolves.**
+- **Own look:** dashed `#C3C8CF` edge on `#FCFCFD`. Editor rings go outside the edge.
+- **On hover or selection:** ☐ + node on the top-left edge; ⋯ + ⋮⋮ on the top-right.
+- **Logic menu open:** only the node is selected; the group itself stays neutral.
+
+## 7. Section shell (Entry / Exit)
+
+- No border of its own.
+- Has its own hover, selected, focused and drop-target states (rings around the whole section).
+- **Never** changes because a child is selected.
+
+## 8. Behaviour
+
+- **Add a condition:**
+  1. Click + on the rail.
+  2. A new block appears, and the indicator picker opens on its own.
+  3. Then the relation picker, then the value or second indicator.
+  4. Once complete, the chart pauses and "Update chart · N changes" shows.
+- **Switch or edit:**
+  - Click the name to switch the indicator.
+  - Click the grey settings to edit them.
+- **Delete:** instant, with a toast and Undo.
+- **Select and group:**
+  1. Hovering a block shows its checkbox.
+  2. Ticking one shows checkboxes on every sibling that can join (same parent). Everything else dims to 0.5.
+  3. The white selection bar appears:
+     - with 1 ticked, its Group-as chips are disabled;
+     - with 2 or more, group them as All of / Any of / None of.
+  4. Esc clears the selection.
+- **Drag:** only by ⋮⋮. A blue insert line marks the spot.
+- **Half-built block:** clicking away marks the missing field in the error state. Update chart is blocked until it's filled ("Finish this condition to update the chart and backtest").
+- **Copilot blocks:** ✦ stays until the user edits the block.
+- **Keyboard:**
+  - In popovers: type to search, ↑ ↓ to move, Enter to pick, Esc to close.
+  - Tab moves to the next field. Space ticks a block.
+  - ⌘D duplicates, ⌘C copies as text, ⌫ deletes.
