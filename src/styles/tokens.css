@@ -25,7 +25,8 @@
   --color-brand-hover: #066fbb;
   --color-brand-pressed: #05609f;
   --color-brand-border: #9cc8ee; /* the + buttons on the canvas */
-  --color-brand-tint: #eaf4fc;
+  --color-brand-tint: #f4f8fd; /* selected row / open trigger background */
+  --color-brand-text: #0a5fa3; /* text on a selected option */
 
   /* ── Text */
   --color-text-primary: #1d1f24; /* headings, block labels */
@@ -47,7 +48,9 @@
   /* ── Borders and lines */
   --color-border-divider: #ececef; /* panel edges, top bar */
   --color-border-control: #e4e6ea; /* buttons, dropdowns, blocks */
-  --color-border-chip: #dfe1e5;
+  --color-border-chip: #dfe1e5; /* also inputs and selects inside dialogs */
+  --color-border-strong: #b9c0c9; /* context bar while a menu is open */
+  --color-border-radio: #c3c7cd; /* unselected radio ring */
   --color-border-subtle: #f0f1f3; /* list rows, chart frame */
   --color-line-connector: #c9ced5; /* canvas rail line */
   --color-line-node: #b9bec6; /* canvas rail dot */
@@ -58,16 +61,52 @@
   --color-action-disabled: #d3d7dd;
 
   /* ── Trading semantics: BUY = green, SELL = red */
-  --color-buy: #22a052;
-  --color-buy-tint: #e8f6ee;
+  --color-buy: #22a052; /* candles */
+  --color-buy-text: #2f8a4e; /* counts and labels */
+  --color-buy-tint: #e6f5ea;
+  --color-buy-strong: #1c6b37; /* "Saved" badge text */
   --color-sell: #e5484d;
+  --color-sell-text: #c2453d;
   --color-sell-tint: #fdecec;
 
-  /* ── Copilot / AI (purple). Border is from the canvas; accent + tint
-        are first guesses, to confirm against the CP- boards in phase 1. */
-  --color-ai-border: #d9d2fb;
-  --color-ai: #7c5cfa;
-  --color-ai-tint: #f4f1fe;
+  /* ── Profit / loss numbers (trade lists, results) */
+  --color-pnl-up: #1c7a3a;
+  --color-pnl-down: #b42318;
+
+  /* ── Position chips in leg rows */
+  --color-chip-buy-bg: #e3f4e8;
+  --color-chip-buy-text: #1c6b37;
+  --color-chip-sell-bg: #fde3e3;
+  --color-chip-sell-text: #9b1c1c;
+
+  /* ── Neutral chip (Draft, setup detail chips) */
+  --color-chip-neutral: #eef0f2;
+
+  /* ── Running-trade count chips (top nav) */
+  --color-forward-bg: #e6f2fb;
+  --color-forward-border: #cfe3f5;
+  --color-forward-text: #0567ad;
+  --color-live-bg: #e6f5ea;
+  --color-live-border: #c6e7d0;
+  --color-live-text: #1c6b37;
+
+  /* ── Warning (outdated results, paused chart) */
+  --color-warn-text: #855400;
+  --color-warn-tint: #fff7e6;
+  --color-warn-dot: #e5a000;
+
+  /* ── Misc greys from the component sheets */
+  --color-text-disabled: #a1a6ad;
+  --color-row-hover: #f4f5f7;
+
+  /* ── Copilot / AI. Uses the brand blue family — NO purple (Hakim, 31 Oct).
+        The canvas boards still show purple; code overrides it. */
+  --color-ai: #0782da; /* ✦ icon, accents (= brand) */
+  --color-ai-text: #0a5fa3; /* text on blue tint (= brand-text) */
+  --color-ai-tint: #f4f8fd; /* chips like "Sees your canvas" (= brand-tint) */
+  --color-ai-badge: #eaf4fc; /* ✦ badge on AI-made blocks */
+  --color-ai-border: #c4dff5; /* Copilot input */
+  --color-ai-border-soft: #b5d6f2; /* badge border, dashed Copilot cards */
 
   /* ── Typography */
   --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
@@ -77,6 +116,8 @@
   --text-caption--line-height: 16px;
   --text-label: 12px; /* dropdowns, helper text */
   --text-label--line-height: 16px;
+  --text-hint: 11.5px; /* option descriptions, e.g. "The index price" */
+  --text-hint--line-height: 16px;
   --text-chip: 12.5px; /* chips, empty-state copy */
   --text-chip--line-height: 18px;
   --text-body: 13px; /* buttons, list items, chat */
@@ -92,13 +133,23 @@
   --radius-chip: 6px;
   --radius-control: 8px; /* buttons, dropdowns */
   --radius-block: 10px; /* condition blocks */
-  --radius-card: 12px; /* Copilot cards, input */
+  --radius-card: 12px; /* Copilot cards, input, menus */
+  --radius-dialog: 14px; /* chart data dialog */
+  --radius-segment: 9px; /* segmented control track + grouped bar */
+  --radius-segment-item: 7px;
   --radius-pill: 999px;
+
+  /* ── Elevation */
+  --shadow-segment: 0 1px 2px rgba(0, 0, 0, 0.08); /* selected segment */
+  --shadow-menu: 0 16px 40px rgba(20, 22, 28, 0.14); /* dropdown menus */
+  --shadow-dialog: 0 20px 50px rgba(20, 22, 28, 0.16); /* chart data dialog */
+  --shadow-popover: 0 8px 24px rgba(16, 24, 40, 0.12); /* ⋯ menus, trade lists, limit panels */
 
   /* ── Layout sizes (fixed parts of the workspace) */
   --spacing-topbar: 56px;
-  --spacing-contextbar: 52px;
-  --spacing-bottompanel: 340px;
+  --spacing-contextbar: 54px;
+  --spacing-bottompanel: 340px; /* chart panel height (above the bar) */
+  --spacing-bottombar: 52px;
   --spacing-copilot: 420px;
   --spacing-control: 36px; /* default button height */
   --spacing-control-sm: 32px; /* dropdowns */

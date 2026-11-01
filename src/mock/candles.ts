@@ -1,16 +1,18 @@
-import type { Candle, Instrument, Timeframe } from '@/types/market';
+import type { Candle, ChartData, Instrument, OptionLeg, Period, Strike, Timeframe } from '@/types/market';
+import { kindOf } from './instruments';
 
 /*
   Mock market data. No backend: we generate believable candles in the browser.
-  "Seeded" means the same instrument + timeframe always gives the same chart,
-  so screenshots and demos look identical every time.
+  "Seeded" means the same choice always gives the same chart, so screenshots
+  and demos look identical every time.
 */
 
-const START_PRICE: Record<Instrument, number> = {
+const SPOT_PRICE: Record<Instrument, number> = {
   NIFTY: 24850,
   BANKNIFTY: 52300,
   FINNIFTY: 23400,
   SENSEX: 81500,
+  BTCUSD: 68400,
 };
 
 const TF_SECONDS: Record<Timeframe, number> = {
@@ -20,8 +22,15 @@ const TF_SECONDS: Record<Timeframe, number> = {
   '15m': 900,
   '30m': 1800,
   '1h': 3600,
+  '4h': 14400,
   '1D': 86400,
 };
+
+// How expensive each strike is compared with ATM (rough, but believable)
+const STRIKE_FACTOR: Record<Strike, number> = {
+  ITM3: 2.2, ITM2: 1.7, ITM1: 1.3, ATM: 1, OTM1: 0.7, OTM2: 0.48, OTM3: 0.32, OTM4: 0.2,
+};
+const EXPIRY_FACTOR = { Weekly: 1, 'Next weekly': 1.4, Monthly: 2.2 };
 
 // Tiny predictable random-number generator (same seed → same numbers)
 function seededRandom(seed: number) {
@@ -38,40 +47,92 @@ function hash(text: string) {
   return Math.abs(h);
 }
 
-export function generateCandles(
-  instrument: Instrument,
-  timeframe: Timeframe,
-  count = 300,
-): Candle[] {
-  const rand = seededRandom(hash(instrument + timeframe));
+/** Candle timestamps: NSE hours (Mon–Fri 09:15–15:30) for indices, 24/7 for crypto. */
+function candleTimes(timeframe: Timeframe, count: number, allDay: boolean) {
   const step = TF_SECONDS[timeframe];
-  let price = START_PRICE[instrument];
-  const volatility = price * 0.0025;
-
-  // Walk back from Fri 30 Oct 2026, 15:30, keeping only NSE market hours
-  // (Mon–Fri, 09:15–15:30). Times are stored as Indian "wall clock" so the
-  // chart's axis reads 09:15, not the UTC equivalent.
   const times: number[] = [];
-  let t = Date.UTC(2026, 9, 30, 15, 30) / 1000;
+  let t = Date.UTC(2026, 9, 30, 15, 30) / 1000; // Fri 30 Oct 2026, 15:30 (stored as IST wall clock)
   while (times.length < count) {
     t -= step;
+    if (allDay) {
+      times.unshift(t);
+      continue;
+    }
     const d = new Date(t * 1000);
     const minutes = d.getUTCHours() * 60 + d.getUTCMinutes();
     const weekday = d.getUTCDay() !== 0 && d.getUTCDay() !== 6;
     const open = step >= 86400 || (minutes >= 9 * 60 + 15 && minutes < 15 * 60 + 30);
     if (weekday && open) times.unshift(t);
   }
+  return times;
+}
 
-  const candles: Candle[] = [];
-  for (let i = count; i > 0; i--) {
+/** A price walk. Multiplies by small % moves, so prices never go below zero. */
+function walk(seedKey: string, start: number, volPct: number, times: number[]): Candle[] {
+  const rand = seededRandom(hash(seedKey));
+  let price = start;
+  return times.map((time, i) => {
     const open = price;
-    // gentle waves + noise so it looks like a real trending market
-    const drift = Math.sin(i / 18) * volatility * 0.35;
-    const close = open + drift + (rand() - 0.5) * volatility * 2;
-    const high = Math.max(open, close) + rand() * volatility * 0.8;
-    const low = Math.min(open, close) - rand() * volatility * 0.8;
-    candles.push({ time: times[count - i], open, high, low, close });
+    const wave = Math.sin(i / 18) * volPct * 0.35;
+    const close = open * (1 + wave + (rand() - 0.5) * volPct * 2);
+    const high = Math.max(open, close) * (1 + rand() * volPct * 0.8);
+    const low = Math.min(open, close) * (1 - rand() * volPct * 0.8);
     price = close;
+    return { time, open, high, low, close };
+  });
+}
+
+function legPremium(instrument: Instrument, leg: OptionLeg) {
+  if (leg.criteria !== 'Strike Type') return leg.premium;
+  const atm = SPOT_PRICE[instrument] * 0.006; // NIFTY ATM weekly ≈ ₹150
+  return atm * STRIKE_FACTOR[leg.strike] * EXPIRY_FACTOR[leg.expiry];
+}
+
+const legKey = (l: OptionLeg) => JSON.stringify(l);
+
+const TRADING_DAYS: Record<Period, number> = { '1M': 21, '3M': 63, '6M': 126, '1Y': 250, '3Y': 750 };
+
+/** How many candles cover the backtest period (capped so the browser stays fast). */
+export function candleCount(instrument: Instrument, timeframe: Timeframe, period: Period) {
+  const crypto = kindOf(instrument) === 'Crypto';
+  const minutesPerDay = crypto ? 1440 : 375; // NSE: 09:15–15:30
+  const days = crypto ? TRADING_DAYS[period] * 1.45 : TRADING_DAYS[period];
+  const perDay = Math.max(1, Math.floor(minutesPerDay / (TF_SECONDS[timeframe] / 60)));
+  return Math.min(12000, Math.max(60, Math.round(days * perDay)));
+}
+
+export function generateSeries(
+  instrument: Instrument,
+  timeframe: Timeframe,
+  chartData: ChartData,
+  period: Period = '1Y',
+): Candle[] {
+  const count = candleCount(instrument, timeframe, period);
+  const times = candleTimes(timeframe, count, kindOf(instrument) === 'Crypto');
+  const spot = SPOT_PRICE[instrument];
+  const base = `${instrument}|${timeframe}|`;
+
+  switch (chartData.kind) {
+    case 'spot':
+      return walk(base + 'spot', spot, 0.0025, times);
+    case 'perpetual':
+      return walk(base + 'perp', spot * 1.0004, 0.0027, times);
+    case 'synthetic':
+      return walk(base + 'synth', spot * 1.0018, 0.0026, times);
+    case 'option':
+      return walk(base + legKey(chartData.leg), legPremium(instrument, chartData.leg), 0.03, times);
+    case 'combined': {
+      // Sum every leg's premium × multiply, candle by candle
+      const series = chartData.legs.map((l) => ({
+        m: l.multiply,
+        c: walk(base + legKey(l), legPremium(instrument, l), 0.03, times),
+      }));
+      return times.map((time, i) => {
+        const open = series.reduce((s, x) => s + x.m * x.c[i].open, 0);
+        const close = series.reduce((s, x) => s + x.m * x.c[i].close, 0);
+        const wick = Math.abs(close - open) * 0.4 + 0.5;
+        return { time, open, close, high: Math.max(open, close) + wick, low: Math.min(open, close) - wick };
+      });
+    }
   }
-  return candles;
 }
