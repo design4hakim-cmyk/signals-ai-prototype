@@ -268,14 +268,14 @@ export const useCanvas = create<CanvasState>((set, get) => {
     closeEditor: () => set({ editor: null }),
     toggleSelect: (id) =>
       set((s) => {
-        // a selection stays on one side (Entry or Exit)
+        // a selection stays among siblings (same box, same tree), so it can always be grouped
         const t = treeOf(s);
-        const side = findNode(t.entry, id) ? t.entry : t.exit;
-        const sameSide = s.selected.filter((x) => findNode(side, x));
+        const parentOf = (x: string) => (findParent(t.entry, x) ?? findParent(t.exit, x))?.id;
+        const siblings = s.selected.filter((x) => parentOf(x) === parentOf(id));
         return {
           editor: null,
           selectedFrame: null,
-          selected: sameSide.includes(id) ? sameSide.filter((x) => x !== id) : [...sameSide, id],
+          selected: siblings.includes(id) ? siblings.filter((x) => x !== id) : [...siblings, id],
         };
       }),
     selectOnly: (ids) => set({ selected: ids, selectedFrame: null, editor: null }),
@@ -307,6 +307,14 @@ export const useCanvas = create<CanvasState>((set, get) => {
 useWorkspace.subscribe((s, prev) => {
   if (s.applied !== prev.applied && s.chartStatus === 'updated') useCanvas.setState((c) => ({ applied: treeOf(c) }));
 });
+
+/** The box (or tree) the selection lives in. Blocks in it can join the selection. */
+export const useSelectionParent = () =>
+  useCanvas((s) => {
+    const first = s.selected[0];
+    if (!first) return null;
+    return (findParent(s.entry, first) ?? findParent(s.exit, first))?.id ?? null;
+  });
 
 /** Bottom bar: "Finish condition 3 first" (U02). */
 export function useUnfinished() {

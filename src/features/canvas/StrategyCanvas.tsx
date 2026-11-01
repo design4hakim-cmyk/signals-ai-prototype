@@ -14,7 +14,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from 'react';
-import { describeCondition, findNode, flatConditions, logicName } from '@/lib/conditions';
+import { describeCondition, findNode, findParent, flatConditions, logicName } from '@/lib/conditions';
 import { useCanvas } from '@/store/canvas';
 import type { Group, Side, StrategyNode } from '@/types/strategy';
 import { GroupChildren, type DropTarget } from './ConditionTree';
@@ -110,8 +110,11 @@ export function StrategyCanvas() {
         const r = el.getBoundingClientRect();
         return r.right > box.left && r.left < box.right && r.bottom > box.top && r.top < box.bottom;
       });
-      const side = hits[0]?.closest<HTMLElement>('[data-frame]')?.dataset.frame;
-      const ids = hits.filter((el) => el.closest<HTMLElement>('[data-frame]')?.dataset.frame === side).map((el) => el.dataset.condition!);
+      // only blocks in the same box as the first one hit, so the selection can be grouped
+      const { entry: en, exit: ex } = useCanvas.getState();
+      const parentOf = (id: string) => (findParent(en, id) ?? findParent(ex, id))?.id;
+      const all = hits.map((el) => el.dataset.condition!);
+      const ids = all.filter((id) => parentOf(id) === parentOf(all[0]));
       const cur = useCanvas.getState().selected;
       if (ids.length !== cur.length || ids.some((id, i) => id !== cur[i])) useCanvas.getState().selectOnly(ids);
     };
@@ -200,7 +203,7 @@ export function StrategyCanvas() {
         {selected.length > 1 && !dragged && <SelectionBar ids={selected} />}
         {selected.length === 1 && !dragged && !toast && (
           <span className="rounded-pill border border-border-control bg-surface px-3 py-1 text-hint text-text-tertiary shadow-popover">
-            Drag or press ↑ ↓ to move · Shift-click to add more · ⌫ to delete
+            Tick more boxes to group them · Drag or ↑ ↓ to move · ⌫ delete
           </span>
         )}
       </div>
@@ -273,10 +276,21 @@ function Frame({ side, root, pos, title, hint, ref }: { side: Side; root: Group;
         data-frame-header
         onPointerDown={onHeaderDown}
         title={`Drag to move ${title}. Click to select.`}
-        className={`-m-1 w-max cursor-default rounded-chip p-1 ${isSelected ? '' : 'hover:outline-1 hover:outline-brand-border hover:outline-solid'}`}
+        className={`group/head -m-1.5 w-max cursor-grab rounded-control p-1.5 transition-colors active:cursor-grabbing ${
+          isSelected ? 'bg-brand-tint' : 'hover:bg-surface-hover hover:outline-1 hover:outline-brand-border hover:outline-solid'
+        }`}
       >
-        <h2 className={`m-0 text-title font-semibold ${isSelected ? 'text-brand-text' : ''}`}>{title}</h2>
-        <p className="m-0 mt-1 text-label text-text-muted">{hint}</p>
+        <span className="flex items-center gap-1.5">
+          {/* Always-visible grip: says "this whole tree can be dragged" */}
+          <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" className={isSelected ? 'text-brand' : 'text-text-subtle group-hover/head:text-text-secondary'}>
+            {[6, 12, 18].flatMap((y) => [9, 15].map((x) => <circle key={`${x}${y}`} cx={x} cy={y} r="1.8" fill="currentColor" />))}
+          </svg>
+          <h2 className={`m-0 text-title font-semibold ${isSelected ? 'text-brand-text' : ''}`}>{title}</h2>
+          <span className={`ml-1 text-hint text-text-subtle transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover/head:opacity-100'}`}>
+            Drag to move
+          </span>
+        </span>
+        <p className="m-0 mt-1 pl-5 text-label text-text-muted">{hint}</p>
       </div>
       {side === 'entry' ? (
         <span className="mt-3 inline-flex h-6 items-center rounded-pill border border-border-control bg-surface px-2.5 text-hint text-text-secondary">On candle close</span>

@@ -7,6 +7,7 @@ import { useCanvas } from '@/store/canvas';
 import type { Group, Side } from '@/types/strategy';
 import { ConditionBlock } from './ConditionBlock';
 import { GroupMenu, LogicMenu } from './menus';
+import { SelectCheck } from './SelectCheck';
 
 /*
   How conditions hang together (B07, B08):
@@ -40,9 +41,9 @@ export function GroupChildren({ group, side, root, insideDragged }: { group: Gro
           <div data-flip={ch.id} className="flex items-center">
             {many && <span className="h-px w-[22px] shrink-0 bg-line-connector" />}
             {ch.kind === 'cond' ? (
-              <ConditionBlock cond={ch} />
+              <ConditionBlock cond={ch} parentId={group.id} />
             ) : (
-              <GroupBox group={ch} side={side} insideDragged={lockDrops || active?.id === ch.id} />
+              <GroupBox group={ch} side={side} parentId={group.id} insideDragged={lockDrops || active?.id === ch.id} />
             )}
           </div>
         </Fragment>
@@ -95,7 +96,7 @@ function LogicButton({ group }: { group: Group }) {
 }
 
 /** A dashed ANY OF / ALL OF box (B08, E07). Its label opens the group menu (E08). */
-function GroupBox({ group, side, insideDragged }: { group: Group; side: Side; insideDragged?: boolean }) {
+function GroupBox({ group, side, parentId, insideDragged }: { group: Group; side: Side; parentId: string; insideDragged?: boolean }) {
   const editor = useCanvas((s) => s.editor);
   const selected = useCanvas((s) => s.selected.includes(group.id));
   const { openEditor, closeEditor, setLogic, addCondition, ungroup, remove, selectOnly, toggleSelect } = useCanvas.getState();
@@ -138,7 +139,8 @@ function GroupBox({ group, side, insideDragged }: { group: Group; side: Side; in
               : 'border border-dashed border-border-group bg-surface-group hover:border-border-strong'
         }`}
       >
-        <div className="absolute -top-[11px] left-3">
+        <div className="absolute -top-[11px] left-3 flex items-center gap-1 rounded-chip bg-surface-group">
+          <SelectCheck id={group.id} parentId={parentId} label={`${logicName(group.logic)} group`} scope="box" />
           <Popover floating
             open={open}
             onClose={closeEditor}

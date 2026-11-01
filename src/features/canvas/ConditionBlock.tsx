@@ -4,22 +4,24 @@ import { Popover } from '@/components/ui/Popover';
 import { mathLabel, operandLabel } from '@/lib/indicators';
 import { useCanvas, type EditorPart } from '@/store/canvas';
 import type { Condition } from '@/types/strategy';
+import { describeCondition } from '@/lib/conditions';
 import { IndicatorPicker, MathMenu, MoreMenu, RelationMenu, SettingsDialog } from './menus';
+import { SelectCheck } from './SelectCheck';
 
 /*
   One condition block: Indicator 1 · Relation · Indicator 2.
   B02–B06: a new block walks you slot by slot.
   E01: hover shows ⋮⋮ (drag) and ⋯ (more) only.
   E02/E03: click the indicator NAME to switch it, its SETTINGS to edit them.
-  Click the block's edge to select it, shift-click to add more (E06: checkbox +
-  blue outline when several). Drag the block itself or its ⋮⋮ to move it.
+  Hover shows a checkbox at the start: tick it, and every block that can be grouped
+  with this one shows its own checkbox (SelectCheck). Clicking the block's edge also
+  selects it; shift-click adds. Drag the block itself or its ⋮⋮ to move it.
   U02: a block left half-built shows dashed "Pick …" slots.
 */
 
-export function ConditionBlock({ cond }: { cond: Condition }) {
+export function ConditionBlock({ cond, parentId }: { cond: Condition; parentId: string }) {
   const editor = useCanvas((s) => s.editor);
   const selected = useCanvas((s) => s.selected.includes(cond.id));
-  const several = useCanvas((s) => s.selected.length > 1);
   const { toggleSelect, selectOnly, closeEditor, openEditor, duplicate, remove, addBelow } = useCanvas.getState();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: cond.id });
 
@@ -59,11 +61,7 @@ export function ConditionBlock({ cond }: { cond: Condition }) {
         data-condition={cond.id}
         className={`inline-flex cursor-default items-center gap-2.5 rounded-block border-[1.5px] py-1.5 pr-2 pl-3.5 whitespace-nowrap transition-[border-color,background-color,box-shadow] duration-150 ${frame}`}
       >
-        {selected && several && (
-          <span role="checkbox" aria-checked="true" aria-label="Selected" className="flex size-4 items-center justify-center rounded-[4px] bg-brand text-text-on-brand">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10" /></svg>
-          </span>
-        )}
+        <SelectCheck id={cond.id} parentId={parentId} label={describeCondition(cond)} scope="block" />
         <OperandSlot cond={cond} which="left" mine={mine} building={building} />
         <RelationSlot cond={cond} open={mine === 'relation'} building={building} />
         <OperandSlot cond={cond} which="right" mine={mine} building={building} />
