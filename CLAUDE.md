@@ -19,7 +19,8 @@ Hakim, lead product designer. **Not a developer.**
 Canvas artifact **"Signals AI · All flows"**: https://claude.ai/artifact/6vqCncptxzd5mdqLviriWT
 - Read its **Read me** notes first (in `project/canvas.json` → `notes`: `readme`, `rm0`–`rm4`).
 - Board prefixes: `ST-` strategies & trade · `CP-` Copilot · `PN-` Pine panel · `BT-` backtest · `K` context + bottom bar · `U` update chart · `B`/`E` canvas builder.
-- Component sheets (the spec for shared parts): `TopNav-Components`, `K12-bottom-bar-states`, `SetupBlock-Unified`.
+- Component sheets (the spec for shared parts): `TopNav-Components`, `K12-bottom-bar-states`, `SetupBlock-Unified`, `Builder-Atoms`, `Builder-Behaviour`.
+- **Canvas builder kit: `design/canvas-builder/`.** Read `COMPONENTS.md` there before any canvas builder work. It is the written spec for the `Builder-Atoms` and `Builder-Behaviour` sheets, with reference images and a token mapping. It supersedes the older `B`/`E` boards where they differ (e.g. All of / Any of / None of instead of AND/OR, checkbox selection instead of ⋯ → Select).
 - "Parking" boards are superseded. Ignore them.
 - Boards can be 100–150 KB. Don't read them raw: save the HTML, then run `python3 -I scripts/board-outline.py <file.html>` to get text + key styles. List the unique text first; it contains the designer's annotations.
 
@@ -88,7 +89,7 @@ npx oxlint src         # lint
 - ✅ 0 · Setup, tokens, first page (ST-Main)
 - ✅ 1 · Context bar (K01–K10)
 - ✅ 1.5 · Top nav, bottom bar, backtest setup block (component sheets)
-- ⬜ 2 · Canvas builder by hand (B02–B08, E01–E09: conditions, AND/OR, edit, group, drag with dnd-kit)
+- ⬜ 2 · Canvas builder by hand: build from `design/canvas-builder/COMPONENTS.md` (atoms, blocks, All of / Any of / None of groups, checkbox selection, menus, drag with dnd-kit). B02–B08 and E01–E09 show the flow; the kit wins where they differ.
 - ⬜ 3 · Copilot flow (CP-*: understood → question → building → applied; refine; edge cases)
 - ⬜ 4 · Pine Script panel (PN-*: errors fixed in place)
 - ⬜ 5 · Update chart flow polish (U01–U06)
