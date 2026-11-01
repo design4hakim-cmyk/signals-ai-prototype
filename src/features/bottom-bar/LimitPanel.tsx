@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ChevronDownIcon } from '@/components/ui/icons';
 import { Popover } from '@/components/ui/Popover';
-import { computeSignals, type Limits } from '@/lib/signals';
+import type { Limits } from '@/lib/signals';
 import { useWorkspace } from '@/store/workspace';
 import { useAppliedChart } from './useSignals';
 
@@ -66,9 +66,9 @@ export function LimitsGroup() {
 
 function LimitPanel({ k, onDone }: { k: Key; onDone: () => void }) {
   const { limits, setLimits } = useWorkspace();
-  const { candles, unlimited, applied } = useAppliedChart();
+  const { signals, unlimited, applied } = useAppliedChart();
   const value = limits[k];
-  const after = useMemo(() => computeSignals(candles, limits).entries, [candles, limits]);
+  const after = signals?.entries ?? 0;
   const set = (v: number | null) => setLimits({ [k]: v });
 
   return (

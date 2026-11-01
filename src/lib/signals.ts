@@ -1,8 +1,10 @@
 import type { Candle } from '@/types/market';
+import type { Condition, Group, Operand, StrategyTree } from '@/types/strategy';
+import { operandSeries } from './indicators';
 
 /*
-  Signals engine (mock, but real maths).
-  The demo strategy: Entry = EMA 9 crosses above EMA 21, Exit = EMA 9 crosses below EMA 21.
+  Signals engine (mock prices, real maths).
+  Reads the conditions built on the canvas (entry + exit trees).
   Limits then filter entries: max trades open at once, max entries per day.
 */
 
@@ -25,52 +27,83 @@ export interface SignalResult {
   trades: Trade[];
 }
 
-function ema(values: number[], period: number) {
-  const k = 2 / (period + 1);
-  const out: number[] = [];
-  values.forEach((v, i) => out.push(i === 0 ? v : v * k + out[i - 1] * (1 - k)));
-  return out;
+/** Is the condition true on candle i? Half-built conditions never count. */
+function conditionAt(c: Condition, i: number, series: (o: Operand) => number[]) {
+  if (!c.left || !c.relation || !c.right) return null;
+  const a = series(c.left);
+  const b = series(c.right);
+  const [x, y, px, py] = [a[i], b[i], a[i - 1], b[i - 1]];
+  if ([x, y].some(Number.isNaN)) return false;
+  const near = Math.abs(x - y) <= Math.max(Math.abs(y), 1) * 0.0005; // "Equals" on prices needs a little slack
+  switch (c.relation) {
+    case 'Equals': return near;
+    case 'Not Equals': return !near;
+    case 'Greater Than': return x > y;
+    case 'Greater Than Equal To': return x >= y;
+    case 'Less Than': return x < y;
+    case 'Less Than Equal To': return x <= y;
+    case 'Cross Above': return px <= py && x > y;
+    case 'Cross Below': return px >= py && x < y;
+  }
+}
+
+/** ALL OF = every part true, ANY OF = one is enough. null = nothing finished inside. */
+function groupAt(g: Group, i: number, series: (o: Operand) => number[]): boolean | null {
+  const parts = g.children
+    .map((ch) => (ch.kind === 'cond' ? conditionAt(ch, i, series) : groupAt(ch, i, series)))
+    .filter((v): v is boolean => v !== null);
+  if (!parts.length) return null;
+  return g.logic === 'AND' ? parts.every(Boolean) : parts.some(Boolean);
 }
 
 const dayOf = (t: number) => Math.floor(t / 86400);
 
-export function computeSignals(candles: Candle[], limits: Limits): SignalResult {
-  const close = candles.map((c) => c.close);
-  const fast = ema(close, 9);
-  const slow = ema(close, 21);
+/**
+ * Walk the candles: an entry fires when the Entry conditions BECOME true,
+ * an exit when the Exit conditions become true (closing every open trade).
+ */
+export function computeSignals(candles: Candle[], limits: Limits, strategy: StrategyTree): SignalResult {
+  const cache = new Map<string, number[]>();
+  const series = (o: Operand) => {
+    const k = JSON.stringify(o);
+    if (!cache.has(k)) cache.set(k, operandSeries(candles, o));
+    return cache.get(k)!;
+  };
 
   const trades: Trade[] = [];
   const open: Trade[] = [];
   const perDayCount = new Map<number, number>();
   let skipped = 0;
+  let wasEntry = true; // no entry on the very first candle
+  let wasExit = true;
 
-  for (let i = 22; i < candles.length; i++) {
-    const crossUp = fast[i - 1] <= slow[i - 1] && fast[i] > slow[i];
-    const crossDown = fast[i - 1] >= slow[i - 1] && fast[i] < slow[i];
+  for (let i = 1; i < candles.length; i++) {
     const c = candles[i];
+    const isEntry = groupAt(strategy.entry, i, series) === true;
+    const isExit = groupAt(strategy.exit, i, series) === true;
 
-    if (crossDown && open.length) {
-      // exit closes every open trade (simple strategy)
+    if (isExit && !wasExit && open.length) {
       for (const t of open.splice(0)) {
         t.exitTime = c.time;
         t.exitPrice = c.close;
       }
     }
-    if (crossUp) {
+    if (isEntry && !wasEntry) {
       const d = dayOf(c.time);
       const today = perDayCount.get(d) ?? 0;
       const blocked =
         (limits.openAtOnce !== null && open.length >= limits.openAtOnce) ||
         (limits.perDay !== null && today >= limits.perDay);
-      if (blocked) {
-        skipped++;
-        continue;
+      if (blocked) skipped++;
+      else {
+        perDayCount.set(d, today + 1);
+        const t: Trade = { entryTime: c.time, entryPrice: c.close, exitTime: null, exitPrice: null };
+        trades.push(t);
+        open.push(t);
       }
-      perDayCount.set(d, today + 1);
-      const t: Trade = { entryTime: c.time, entryPrice: c.close, exitTime: null, exitPrice: null };
-      trades.push(t);
-      open.push(t);
     }
+    wasEntry = isEntry;
+    wasExit = isExit;
   }
   return {
     entries: trades.length,
