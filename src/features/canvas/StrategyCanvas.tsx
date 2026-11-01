@@ -1,8 +1,9 @@
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
   KeyboardSensor,
+  MeasuringStrategy,
+  PointerSensor,
   pointerWithin,
   rectIntersection,
   useSensor,
@@ -12,16 +13,23 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from 'react';
 import { describeCondition, findNode, flatConditions, logicName } from '@/lib/conditions';
 import { useCanvas } from '@/store/canvas';
 import type { Group, Side, StrategyNode } from '@/types/strategy';
 import { GroupChildren, type DropTarget } from './ConditionTree';
+import { useSmartAnimate } from './useSmartAnimate';
+import { MAX_ZOOM, MIN_ZOOM, useViewport } from './useViewport';
 
 /*
-  The dotted canvas with Entry and Exit columns (B02–B08, E01–E09).
-  Everything here is real and editable. Drag and drop uses dnd-kit:
-  drag a block by its ⋮⋮ handle, drop it between rows or into a box.
+  The canvas (B02–B08, E01–E09), with a Figma-style camera:
+    • Entry and Exit are FRAMES. Click a frame's title to select it, drag the
+      title (or use the arrow keys) to move it anywhere.
+    • Click a block or a box's edge to select it; shift-click adds; drag on empty
+      canvas draws a selection box. Drag a selected thing, or press ↑ / ↓, to move
+      it up and down — the rest of the tree slides into place (smart animate).
+    • Zoom and pan: see useViewport. Zoom controls sit bottom-right.
+  Moving frames and the camera is layout only: it never pauses the chart.
 */
 
 // The smallest drop target under the pointer wins, so a gap inside a box beats the box itself
@@ -37,17 +45,34 @@ const smallestUnderPointer: CollisionDetection = (args) => {
 
 const nodeWords = (n: StrategyNode | null) => (!n ? '' : n.kind === 'cond' ? describeCondition(n) : `${logicName(n.logic)} group`);
 
+/** Exit sits to the right of Entry until someone moves it. */
+const EXIT_GAP = 72;
+const MIN_ENTRY_WIDTH = 560;
+
+interface Marquee {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export function StrategyCanvas() {
   const entry = useCanvas((s) => s.entry);
   const exit = useCanvas((s) => s.exit);
   const selected = useCanvas((s) => s.selected);
   const toast = useCanvas((s) => s.toast);
-  const { move, clearSelection } = useCanvas.getState();
+  const view = useCanvas((s) => s.view);
+  const { move } = useCanvas.getState();
   const [dragId, setDragId] = useState<string | null>(null);
   const [overTarget, setOverTarget] = useState<DropTarget | null>(null);
+  const [marquee, setMarquee] = useState<Marquee | null>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const worldRef = useRef<HTMLDivElement>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor));
+  const cam = useViewport(viewportRef, worldRef);
 
   useCanvasShortcuts();
+  useSmartAnimate(worldRef);
 
   const find = (id: string) => findNode(entry, id) ?? findNode(exit, id);
   const dragged = dragId ? find(dragId) : null;
@@ -67,20 +92,78 @@ export function StrategyCanvas() {
     setOverTarget(null);
   };
 
+  // Empty canvas: Space/middle-drag pans, a plain drag draws a selection box, a click clears
+  const onPointerDown = (e: ReactPointerEvent) => {
+    if (cam.spaceDown || e.button === 1) return cam.startPan(e);
+    if (e.button !== 0 || (e.target as HTMLElement).closest('button,[data-condition],[data-group-box],[data-frame-header],input,[data-menu]')) return;
+    e.preventDefault();
+    const vp = viewportRef.current!.getBoundingClientRect();
+    const start = { x: e.clientX, y: e.clientY };
+    let moved = false;
+    const onMove = (ev: PointerEvent) => {
+      const box = { left: Math.min(start.x, ev.clientX), top: Math.min(start.y, ev.clientY), right: Math.max(start.x, ev.clientX), bottom: Math.max(start.y, ev.clientY) };
+      if (!moved && box.right - box.left < 4 && box.bottom - box.top < 4) return;
+      moved = true;
+      setMarquee({ x: box.left - vp.left, y: box.top - vp.top, w: box.right - box.left, h: box.bottom - box.top });
+      // every block the box touches, on the side of the first one hit
+      const hits = [...worldRef.current!.querySelectorAll<HTMLElement>('[data-condition]')].filter((el) => {
+        const r = el.getBoundingClientRect();
+        return r.right > box.left && r.left < box.right && r.bottom > box.top && r.top < box.bottom;
+      });
+      const side = hits[0]?.closest<HTMLElement>('[data-frame]')?.dataset.frame;
+      const ids = hits.filter((el) => el.closest<HTMLElement>('[data-frame]')?.dataset.frame === side).map((el) => el.dataset.condition!);
+      const cur = useCanvas.getState().selected;
+      if (ids.length !== cur.length || ids.some((id, i) => id !== cur[i])) useCanvas.getState().selectOnly(ids);
+    };
+    const onUp = () => {
+      if (!moved) useCanvas.getState().clearSelection();
+      setMarquee(null);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  // dots move and scale with the camera, like Figma's canvas grid
+  const dot = 16 * view.zoom;
+
   return (
-    <section aria-label="Strategy canvas" className="relative min-h-0 grow">
-      <DndContext sensors={sensors} collisionDetection={smallestUnderPointer} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={() => { setDragId(null); setOverTarget(null); }}>
+    <section aria-label="Strategy canvas" className="relative min-h-0 grow overflow-hidden">
+      <DndContext
+        sensors={sensors}
+        collisionDetection={smallestUnderPointer}
+        measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+        autoScroll={false}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+        onDragCancel={() => { setDragId(null); setOverTarget(null); }}
+      >
         <div
-          className="bg-canvas-dots absolute inset-0 overflow-auto"
-          // clicking empty canvas clears a selection
-          onMouseDown={(e) => {
-            if (selected.length && !(e.target as HTMLElement).closest('[data-condition],button,[role="dialog"],[role="menu"]')) clearSelection();
+          ref={viewportRef}
+          onPointerDown={onPointerDown}
+          className="bg-canvas-dots absolute inset-0 overflow-hidden select-none"
+          style={{
+            backgroundSize: `${dot}px ${dot}px`,
+            backgroundPosition: `${view.x}px ${view.y}px`,
+            cursor: cam.panning ? 'grabbing' : cam.spaceDown ? 'grab' : undefined,
           }}
         >
-          <div className="grid min-w-max grid-cols-[minmax(560px,1.6fr)_minmax(400px,1fr)] gap-8 px-12 pt-8 pb-28">
-            <Column side="entry" root={entry} title="Entry" hint="When your strategy should enter a position" />
-            <Column side="exit" root={exit} title="Exit" hint="When your strategy should exit" />
+          <div
+            ref={worldRef}
+            className={`absolute top-0 left-0 origin-top-left ${cam.spaceDown ? 'pointer-events-none' : ''}`}
+            style={{
+              transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`,
+              transition: cam.gliding ? 'transform 240ms cubic-bezier(0.2, 0, 0, 1)' : 'none',
+            }}
+          >
+            <Frames entry={entry} exit={exit} />
           </div>
+
+          {marquee && (
+            <div className="pointer-events-none absolute border border-brand bg-drop-tint" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }} />
+          )}
 
           {isEmpty && !dragId && (
             <div className="pointer-events-none absolute top-[200px] left-1/2 flex w-[420px] -translate-x-1/2 flex-col items-center gap-2 text-center">
@@ -94,10 +177,13 @@ export function StrategyCanvas() {
 
         <DragOverlay dropAnimation={null}>
           {dragged && (
-            <div className="inline-flex items-center gap-2.5 rounded-block border-[1.5px] border-border-strong bg-surface px-3.5 py-2 text-body font-medium whitespace-nowrap shadow-drag">
-              <span className="text-[14px] tracking-[-2px] text-text-subtle">⋮⋮</span>
-              {dragged.kind === 'cond' ? describeCondition(dragged, ' · ') : nodeWords(dragged)}
-              <span className="text-hint font-normal text-text-subtle">moving…</span>
+            // drawn at the canvas zoom, so it looks like the thing you picked up
+            <div className="origin-top-left" style={{ transform: `scale(${view.zoom})` }}>
+              <div className="inline-flex items-center gap-2.5 rounded-block border-[1.5px] border-border-strong bg-surface px-3.5 py-2 text-body font-medium whitespace-nowrap shadow-drag">
+                <span className="text-[14px] tracking-[-2px] text-text-subtle">⋮⋮</span>
+                {dragged.kind === 'cond' ? describeCondition(dragged, ' · ') : nodeWords(dragged)}
+                <span className="text-hint font-normal text-text-subtle">moving…</span>
+              </div>
             </div>
           )}
         </DragOverlay>
@@ -111,19 +197,87 @@ export function StrategyCanvas() {
           </div>
         )}
         {toast && !dragged && <CanvasToast text={toast.text} undo={toast.undo} />}
-        {selected.length > 0 && !dragged && <SelectionBar ids={selected} />}
+        {selected.length > 1 && !dragged && <SelectionBar ids={selected} />}
+        {selected.length === 1 && !dragged && !toast && (
+          <span className="rounded-pill border border-border-control bg-surface px-3 py-1 text-hint text-text-tertiary shadow-popover">
+            Drag or press ↑ ↓ to move · Shift-click to add more · ⌫ to delete
+          </span>
+        )}
       </div>
+
+      <ZoomControls zoom={view.zoom} onStep={cam.step} onFit={cam.fit} onReset={() => cam.zoomTo(1, undefined, true)} />
     </section>
   );
 }
 
-function Column({ side, root, title, hint }: { side: Side; root: Group; title: string; hint: string }) {
-  const { addCondition } = useCanvas.getState();
-  const hasRows = root.children.length > 0;
+/** Entry and Exit frames, each at its own spot on the canvas. */
+function Frames({ entry, exit }: { entry: Group; exit: Group }) {
+  const frames = useCanvas((s) => s.frames);
+  const entryRef = useRef<HTMLDivElement>(null);
+  const [entryWidth, setEntryWidth] = useState(MIN_ENTRY_WIDTH);
+
+  useLayoutEffect(() => {
+    const el = entryRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setEntryWidth(Math.max(MIN_ENTRY_WIDTH, el.offsetWidth)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const exitPos = frames.exit ?? { x: frames.entry.x + entryWidth + EXIT_GAP, y: frames.entry.y };
   return (
-    <div className="min-w-0">
-      <h2 className="m-0 text-title font-semibold">{title}</h2>
-      <p className="m-0 mt-1 text-label text-text-muted">{hint}</p>
+    <>
+      <Frame ref={entryRef} side="entry" root={entry} pos={frames.entry} title="Entry" hint="When your strategy should enter a position" />
+      <Frame side="exit" root={exit} pos={exitPos} title="Exit" hint="When your strategy should exit" />
+    </>
+  );
+}
+
+function Frame({ side, root, pos, title, hint, ref }: { side: Side; root: Group; pos: { x: number; y: number }; title: string; hint: string; ref?: Ref<HTMLDivElement> }) {
+  const { addCondition, selectFrame, moveFrame } = useCanvas.getState();
+  const isSelected = useCanvas((s) => s.selectedFrame === side);
+  const [moving, setMoving] = useState(false);
+  const hasRows = root.children.length > 0;
+
+  // Drag the title to move the whole tree (Figma: drag a frame by its name)
+  const onHeaderDown = (e: ReactPointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    selectFrame(side);
+    const zoom = useCanvas.getState().view.zoom;
+    const start = { px: e.clientX, py: e.clientY, x: pos.x, y: pos.y };
+    const onMove = (ev: PointerEvent) => {
+      setMoving(true);
+      moveFrame(side, { x: Math.round(start.x + (ev.clientX - start.px) / zoom), y: Math.round(start.y + (ev.clientY - start.py) / zoom) });
+    };
+    const onUp = () => {
+      setMoving(false);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  return (
+    <div
+      ref={ref}
+      data-frame={side}
+      className={`group/frame absolute w-max rounded-card p-4 transition-shadow ${
+        isSelected ? 'outline-[1.5px] outline-brand outline-solid' : 'outline-1 outline-transparent outline-solid'
+      } ${moving ? 'shadow-drag' : ''}`}
+      style={{ left: pos.x - 16, top: pos.y - 16 }}
+    >
+      <div
+        data-frame-header
+        onPointerDown={onHeaderDown}
+        title={`Drag to move ${title}. Click to select.`}
+        className={`-m-1 w-max cursor-default rounded-chip p-1 ${isSelected ? '' : 'hover:outline-1 hover:outline-brand-border hover:outline-solid'}`}
+      >
+        <h2 className={`m-0 text-title font-semibold ${isSelected ? 'text-brand-text' : ''}`}>{title}</h2>
+        <p className="m-0 mt-1 text-label text-text-muted">{hint}</p>
+      </div>
       {side === 'entry' ? (
         <span className="mt-3 inline-flex h-6 items-center rounded-pill border border-border-control bg-surface px-2.5 text-hint text-text-secondary">On candle close</span>
       ) : (
@@ -144,6 +298,24 @@ function Column({ side, root, title, hint }: { side: Side; root: Group; title: s
           +
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Bottom-right: − 100% + and Fit, like Figma's zoom menu. */
+function ZoomControls({ zoom, onStep, onFit, onReset }: { zoom: number; onStep: (d: 1 | -1) => void; onFit: () => void; onReset: () => void }) {
+  const btn = 'flex h-7 min-w-7 items-center justify-center rounded-chip px-1.5 text-body text-text-secondary hover:bg-surface-hover disabled:text-text-disabled disabled:hover:bg-transparent';
+  return (
+    <div role="toolbar" aria-label="Zoom" className="absolute right-4 bottom-4 flex items-center gap-0.5 rounded-control border border-border-control bg-surface p-0.5 shadow-popover">
+      <button type="button" aria-label="Zoom out" title="Zoom out · ⌘−" disabled={zoom <= MIN_ZOOM} onClick={() => onStep(-1)} className={btn}>−</button>
+      <button type="button" title="Back to 100% · ⇧0" onClick={onReset} className={`${btn} w-12 text-label font-medium tabular-nums`}>
+        {Math.round(zoom * 100)}%
+      </button>
+      <button type="button" aria-label="Zoom in" title="Zoom in · ⌘+" disabled={zoom >= MAX_ZOOM} onClick={() => onStep(1)} className={btn}>+</button>
+      <span className="mx-0.5 h-4 w-px bg-border-control" />
+      <button type="button" title="See everything · ⇧1" onClick={onFit} className={`${btn} text-label font-medium`}>
+        Fit
+      </button>
     </div>
   );
 }
@@ -189,7 +361,7 @@ function SelectionBar({ ids }: { ids: string[] }) {
   );
 }
 
-/** ⌘Z undo · ⌫ delete selected · ⌘D duplicate selected · Esc clears. Ignored while typing. */
+/** ⌘Z undo · ⌫ delete · ⌘D duplicate · ↑↓ move · arrows nudge a frame · Esc clears. Ignored while typing. */
 function useCanvasShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -208,7 +380,20 @@ function useCanvasShortcuts() {
       } else if ((e.key === 'Backspace' || e.key === 'Delete') && c.selected.length) {
         e.preventDefault();
         c.remove(c.selected);
-      } else if (e.key === 'Escape' && c.selected.length && !c.editor) {
+      } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && c.selected.length === 1 && !mod) {
+        // ↑ ↓ moves the selected block or box up and down the tree
+        e.preventDefault();
+        c.nudge(c.selected[0], e.key === 'ArrowUp' ? -1 : 1);
+      } else if (e.key.startsWith('Arrow') && c.selectedFrame && !mod) {
+        // arrows nudge a selected frame: 1px, or 10px with Shift (Figma)
+        e.preventDefault();
+        const el = document.querySelector<HTMLElement>(`[data-frame="${c.selectedFrame}"]`);
+        if (!el) return;
+        const d = e.shiftKey ? 10 : 1;
+        const x = el.offsetLeft + 16 + (e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0);
+        const y = el.offsetTop + 16 + (e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0);
+        c.moveFrame(c.selectedFrame, { x, y });
+      } else if (e.key === 'Escape' && (c.selected.length || c.selectedFrame) && !c.editor) {
         c.clearSelection();
       }
     };

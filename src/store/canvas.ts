@@ -47,6 +47,19 @@ export interface Editor {
   part: EditorPart;
 }
 
+/** Where the camera is: pan offset in screen px, and zoom (1 = 100%). */
+export interface View {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+/** Top-left of the Entry / Exit frame on the canvas, in canvas px. Exit `null` = sits right of Entry. */
+export interface FramePos {
+  x: number;
+  y: number;
+}
+
 interface CanvasToast {
   text: string;
   undo: boolean;
@@ -55,7 +68,10 @@ interface CanvasToast {
 interface CanvasState extends StrategyTree {
   applied: StrategyTree;
   editor: Editor | null;
-  selected: string[];
+  selected: string[]; // conditions and groups, one side at a time
+  selectedFrame: Side | null; // the whole Entry or Exit tree
+  frames: { entry: FramePos; exit: FramePos | null };
+  view: View;
   history: StrategyTree[];
   toast: CanvasToast | null;
 
@@ -76,7 +92,12 @@ interface CanvasState extends StrategyTree {
   openEditor: (id: string, part: EditorPart) => void;
   closeEditor: () => void;
   toggleSelect: (id: string) => void;
+  selectOnly: (ids: string[]) => void;
   clearSelection: () => void;
+  nudge: (id: string, dir: -1 | 1) => void;
+  selectFrame: (side: Side | null) => void;
+  moveFrame: (side: Side, pos: FramePos) => void;
+  setView: (v: View) => void;
   set: (patch: Partial<CanvasState>) => void;
 }
 
@@ -124,11 +145,14 @@ export const useCanvas = create<CanvasState>((set, get) => {
     applied: empty,
     editor: null,
     selected: [],
+    selectedFrame: null,
+    frames: { entry: { x: 48, y: 32 }, exit: null },
+    view: { x: 0, y: 0, zoom: 1 },
     history: [],
     toast: null,
 
     load: (t) => {
-      set({ ...t, applied: t, editor: null, selected: [], history: [], toast: null });
+      set({ ...t, applied: t, editor: null, selected: [], selectedFrame: null, history: [], toast: null });
       syncEntry(t);
     },
 
@@ -250,10 +274,31 @@ export const useCanvas = create<CanvasState>((set, get) => {
         const sameSide = s.selected.filter((x) => findNode(side, x));
         return {
           editor: null,
+          selectedFrame: null,
           selected: sameSide.includes(id) ? sameSide.filter((x) => x !== id) : [...sameSide, id],
         };
       }),
-    clearSelection: () => set({ selected: [] }),
+    selectOnly: (ids) => set({ selected: ids, selectedFrame: null, editor: null }),
+    clearSelection: () => set({ selected: [], selectedFrame: null }),
+
+    // ↑ / ↓ on a selected block: swap with its neighbour; at the edge of a group, step out of it
+    nudge: (id, dir) => {
+      const t = treeOf(get());
+      const parent = findParent(t.entry, id) ?? findParent(t.exit, id);
+      if (!parent) return;
+      const i = parent.children.findIndex((c) => c.id === id);
+      const j = i + dir;
+      if (j >= 0 && j < parent.children.length) return get().move(id, parent.id, dir < 0 ? j : j + 1);
+      const grand = findParent(t.entry, parent.id) ?? findParent(t.exit, parent.id);
+      if (!grand) return;
+      const p = grand.children.findIndex((c) => c.id === parent.id);
+      get().move(id, grand.id, dir < 0 ? p : p + 1);
+    },
+
+    // Layout only: moving a frame or the camera never changes the strategy
+    selectFrame: (side) => set({ selectedFrame: side, selected: [], editor: null }),
+    moveFrame: (side, pos) => set((s) => ({ frames: { ...s.frames, [side]: pos } })),
+    setView: (view) => set({ view }),
     set: (patch) => set(patch),
   };
 });
