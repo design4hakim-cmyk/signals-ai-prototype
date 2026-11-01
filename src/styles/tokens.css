@@ -95,6 +95,16 @@
   --color-warn-tint: #fff7e6;
   --color-warn-dot: #e5a000;
 
+  /* ── Canvas builder (B02–B08, E01–E09) */
+  --color-brand-soft: #eef5fc; /* "Relation" slot, active indicator, "× 1.5" chip */
+  --color-brand-soft-border: #dbe8f6;
+  --color-drop-tint: rgba(7, 130, 218, 0.05); /* box you're dragging into */
+  --color-surface-group: #f6f7f9; /* ANY OF / ALL OF box */
+  --color-border-group: #c3c8cf; /* dashed box outline */
+  --color-danger: #b42318; /* Delete in menus */
+  --color-toolbar-divider: #3a3e48; /* dark selection bar + toast */
+  --color-toolbar-muted: #9aa0a8;
+
   /* ── Misc greys from the component sheets */
   --color-text-disabled: #a1a6ad;
   --color-row-hover: #f4f5f7;
@@ -144,6 +154,9 @@
   --shadow-menu: 0 16px 40px rgba(20, 22, 28, 0.14); /* dropdown menus */
   --shadow-dialog: 0 20px 50px rgba(20, 22, 28, 0.16); /* chart data dialog */
   --shadow-popover: 0 8px 24px rgba(16, 24, 40, 0.12); /* ⋯ menus, trade lists, limit panels */
+  --shadow-focus: 0 0 0 4px rgba(7, 130, 218, 0.1); /* block being edited or selected */
+  --shadow-toolbar: 0 10px 30px rgba(0, 0, 0, 0.2); /* dark selection bar, canvas toast */
+  --shadow-drag: 0 12px 28px rgba(20, 22, 28, 0.18); /* block while dragging */
 
   /* ── Layout sizes (fixed parts of the workspace) */
   --spacing-topbar: 56px;

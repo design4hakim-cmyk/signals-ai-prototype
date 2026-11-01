@@ -80,6 +80,13 @@ export const InfoIcon = ({ size = 15 }: P) => (
   </svg>
 );
 
+/** Favourite star in the canvas menus (B02, B04, B05). Filled when starred. */
+export const StarIcon = ({ size = 15, filled = false }: P & { filled?: boolean }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+    <path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" />
+  </svg>
+);
+
 export const ChevronDownIcon =({ size = 12 }: P) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
     <path d="M6 9l6 6 6-6" />
