@@ -113,8 +113,8 @@ export const SelectionBarAndToast: StoryObj = {
       <div className="flex flex-col items-start gap-5">
         <Tile label="One ticked · grouping waits"><SelectionBar count={1} /></Tile>
         <Tile label="Two ticked"><SelectionBar count={2} /></Tile>
-        <Tile label="After delete"><CanvasToast text="Deleted RSI (14) Greater Than 50" /></Tile>
-        <Tile label="After grouping"><CanvasToast text="Grouped 2 conditions as Any of" /></Tile>
+        <Tile label="After delete"><CanvasToast text="Deleted RSI (14) Greater Than 50" onUndo={() => {}} /></Tile>
+        <Tile label="After grouping"><CanvasToast text="Grouped 2 conditions as Any of" onUndo={() => {}} /></Tile>
       </div>
     </Board>
   ),

@@ -1,4 +1,4 @@
-import { Children, type ReactNode } from 'react';
+import { Children, isValidElement, type HTMLAttributes, type ReactNode } from 'react';
 import { FieldAtom } from './atoms';
 import { Checkbox, DragHandle, KitButton, Message, MoreButton, RailAddButton } from './controls';
 import { DRAG_TILT, dropStyle, editorRing, type DropState, type EditorState } from './editorRing';
@@ -24,7 +24,8 @@ export function Rail({ children, insertAt }: { children: ReactNode; /** blue ins
     <div className="relative flex flex-col gap-2.5 pl-[22px]">
       <span aria-hidden="true" className="absolute top-0 bottom-3 left-[6px] w-px bg-line-connector" />
       {rows.map((row, i) => (
-        <div key={i} className="relative">
+        // data-flip: rows glide to their new place when the tree changes (smart animate)
+        <div key={isValidElement(row) ? row.key : i} data-flip={isValidElement(row) && row.key ? String(row.key).replace(/^\.\$/, '') : undefined} className="relative">
           {insertAt === i && <span aria-hidden="true" className="absolute -top-[7px] -left-[16px] h-[2px] w-[260px] rounded-full bg-brand" />}
           <span aria-hidden="true" className="absolute top-[19px] -left-[16px] h-px w-3 bg-line-connector" />
           {row}
@@ -49,15 +50,44 @@ export interface LogicGroupProps {
   dropReason?: string;
   dragging?: boolean;
   force?: EditorState;
+  /** app slots: the live logic node (with its menu), ⋯ (with its menu), ⋮⋮ (with drag listeners) */
+  nodeSlot?: ReactNode;
+  moreSlot?: ReactNode;
+  handleSlot?: ReactNode;
+  keepControls?: boolean;
+  onToggleSelect?: (v: boolean) => void;
+  insertAt?: number;
+  nodeId?: string;
+  /** why it can't join the selection (shown on hover) */
+  cantJoinReason?: string;
 }
 
-export function LogicGroup({ word = 'Any of', children, selected = false, nodeOpen = false, joinable = 'none', drop = 'none', dropReason, dragging = false, force }: LogicGroupProps) {
+export function LogicGroup({
+  word = 'Any of',
+  children,
+  selected = false,
+  nodeOpen = false,
+  joinable = 'none',
+  drop = 'none',
+  dropReason,
+  dragging = false,
+  force,
+  nodeSlot,
+  moreSlot,
+  handleSlot,
+  keepControls = false,
+  onToggleSelect,
+  insertAt,
+  nodeId,
+  cantJoinReason,
+}: LogicGroupProps) {
   const { state, mode, props } = useEditorState({ ...force, selected: selected || dragging || force?.selected, lifted: dragging });
   const editor = mode === 'editor';
   const engaged = state.inter !== 'default' || !!state.selected;
   return (
-    <div className={`inline-flex flex-col gap-1.5 ${joinable === 'cantJoin' ? 'opacity-50' : ''}`}>
+    <div className={`inline-flex flex-col gap-1.5 ${joinable === 'cantJoin' ? 'opacity-50' : ''}`} title={joinable === 'cantJoin' ? cantJoinReason : undefined}>
       <div
+        data-node-id={nodeId}
         role="group"
         aria-label={`${word} group`}
         tabIndex={0}
@@ -71,16 +101,18 @@ export function LogicGroup({ word = 'Any of', children, selected = false, nodeOp
       >
         {/* top edge: ☐ + node on the left, ⋯ + ⋮⋮ on the right */}
         <div className="absolute -top-3.5 left-2.5 flex items-center gap-1.5 bg-group-bg px-1">
-          {editor && (engaged || joinable === 'canJoin') && <Checkbox label={`Select ${word} group`} checked={!!state.selected && !dragging} />}
-          <FieldAtom kind="logic" label={word} open={nodeOpen} />
+          {editor && (engaged || joinable === 'canJoin') && (
+            <Checkbox label={`Select ${word} group`} checked={!!state.selected && !dragging} onChange={onToggleSelect} />
+          )}
+          {nodeSlot ?? <FieldAtom kind="logic" label={word} open={nodeOpen} />}
         </div>
-        {editor && engaged && !dragging && (
+        {editor && (engaged || keepControls) && !dragging && (
           <div className="absolute -top-3 right-2.5 flex items-center gap-0.5 bg-group-bg px-1">
-            <MoreButton label="Group actions" />
-            <DragHandle />
+            {moreSlot ?? <MoreButton label="Group actions" />}
+            {handleSlot ?? <DragHandle />}
           </div>
         )}
-        <Rail>{children}</Rail>
+        <Rail insertAt={insertAt}>{children}</Rail>
       </div>
       {drop === 'invalid' && dropReason && <Message tone="error">{dropReason}</Message>}
     </div>
@@ -97,9 +129,18 @@ export interface SectionShellProps {
   selected?: boolean;
   drop?: DropState;
   force?: EditorState;
+  /** app slots: the live timing chip and root logic node (each with a menu) */
+  timingSlot?: ReactNode;
+  logicSlot?: ReactNode;
+  onAdd?: () => void;
+  /** e.g. pointer handlers that drag the whole section by its header */
+  headerProps?: HTMLAttributes<HTMLDivElement>;
+  insertAt?: number;
+  /** shown before the title, e.g. a grip that says the section can be dragged */
+  titleAddon?: ReactNode;
 }
 
-export function SectionShell({ side, word = 'All of', children, selected = false, drop = 'none', force }: SectionShellProps) {
+export function SectionShell({ side, word = 'All of', children, selected = false, drop = 'none', force, timingSlot, logicSlot, onAdd, headerProps, insertAt, titleAddon }: SectionShellProps) {
   const { state, mode, props } = useEditorState({ ...force, selected: selected || force?.selected });
   const rows = Children.toArray(children);
   const title = side === 'entry' ? 'Entry' : 'Exit';
@@ -112,12 +153,12 @@ export function SectionShell({ side, word = 'All of', children, selected = false
       style={{ boxShadow: drop !== 'none' ? '' : editorRing(state, mode), ...dropStyle(drop, mode) }}
       className="inline-flex min-w-[340px] flex-col gap-2.5 rounded-card p-4 outline-none transition-shadow duration-100"
     >
-      <div>
-        <h3 className="m-0 text-title font-semibold">{title}</h3>
+      <div {...headerProps}>
+        <h3 className="m-0 flex items-center gap-1.5 text-title font-semibold">{titleAddon}{title}</h3>
         <p className="m-0 mt-0.5 text-label text-text-tertiary">{side === 'entry' ? 'When your strategy should enter a position' : 'When your strategy should exit'}</p>
       </div>
       <div className="flex items-center gap-2 text-label text-text-tertiary">
-        Check <FieldAtom kind="timing" label="On candle close" />
+        Check {timingSlot ?? <FieldAtom kind="timing" label="On candle close" />}
       </div>
       <div className="relative flex flex-col pl-[6px]">
         <span aria-hidden="true" className="size-3 -translate-x-[6px] rounded-full border border-line-node bg-surface" />
@@ -125,17 +166,17 @@ export function SectionShell({ side, word = 'All of', children, selected = false
           <span aria-hidden="true" className="absolute top-0 bottom-3.5 left-0 w-px bg-line-connector" />
           {rows.length >= 2 && (
             <div className="mb-2.5 pl-4">
-              <FieldAtom kind="logic" label={word} />
+              {logicSlot ?? <FieldAtom kind="logic" label={word} />}
             </div>
           )}
           {rows.length > 0 ? (
             <div className="pl-[10px]">
-              <Rail>{rows}</Rail>
+              <Rail insertAt={insertAt}>{rows}</Rail>
             </div>
           ) : (
             <div className="flex items-center gap-0 pl-0 pt-1">
               <span aria-hidden="true" className="h-px w-4 bg-line-connector" />
-              {editor && <KitButton variant="primary">+ Add {title} Condition</KitButton>}
+              {editor && <KitButton variant="primary" onClick={onAdd}>+ Add {title} Condition</KitButton>}
             </div>
           )}
           {drop === 'valid' && (
@@ -146,7 +187,7 @@ export function SectionShell({ side, word = 'All of', children, selected = false
         </div>
         {rows.length > 0 && editor && (
           <span className="-translate-x-[14px]">
-            <RailAddButton label={`Add ${title.toLowerCase()} condition`} />
+            <RailAddButton label={`Add ${title.toLowerCase()} condition`} onClick={onAdd} />
           </span>
         )}
       </div>
@@ -156,30 +197,40 @@ export function SectionShell({ side, word = 'All of', children, selected = false
 
 /* ── Selection bar and toast (white, same surface as popovers — no dark bars) ── */
 
-export function SelectionBar({ count }: { count: number }) {
-  const canGroup = count >= 2;
+export interface SelectionBarProps {
+  count: number;
+  onGroup?: (w: LogicWord) => void;
+  onDuplicate?: () => void;
+  onDelete?: () => void;
+  onClear?: () => void;
+  /** grouping would go past 2 levels */
+  groupBlocked?: string;
+}
+
+export function SelectionBar({ count, onGroup, onDuplicate, onDelete, onClear, groupBlocked }: SelectionBarProps) {
+  const canGroup = count >= 2 && !groupBlocked;
   return (
     <div role="toolbar" aria-label="Selection" className="inline-flex items-center gap-1 rounded-block border border-border-control bg-surface py-1.5 pr-1.5 pl-3 text-body whitespace-nowrap shadow-surface">
       <span className="font-medium">{count} selected</span>
       <span className="mx-1.5 h-4 w-px bg-border-control" />
       <span className="mr-1 text-hint text-text-tertiary">Group as</span>
       {(['All of', 'Any of', 'None of'] as const).map((w) => (
-        <KitButton key={w} variant="secondary" disabled={!canGroup}>{w}</KitButton>
+        <KitButton key={w} variant="secondary" disabled={!canGroup} onClick={() => onGroup?.(w)}>{w}</KitButton>
       ))}
-      {!canGroup && <span className="ml-1 text-hint text-text-subtle">Tick one more to group</span>}
+      {!canGroup && <span className="ml-1 text-hint text-text-subtle">{groupBlocked ?? 'Tick one more to group'}</span>}
       <span className="mx-1.5 h-4 w-px bg-border-control" />
-      <KitButton variant="tertiary">Duplicate</KitButton>
-      <KitButton variant="destructive">Delete</KitButton>
-      <button type="button" aria-label="Clear selection" className="flex size-7 items-center justify-center rounded-chip text-text-tertiary hover:bg-surface-selected">✕</button>
+      <KitButton variant="tertiary" onClick={onDuplicate}>Duplicate</KitButton>
+      <KitButton variant="destructive" onClick={onDelete}>Delete</KitButton>
+      <button type="button" aria-label="Clear selection" onClick={onClear} className="flex size-7 items-center justify-center rounded-chip text-text-tertiary hover:bg-surface-selected">✕</button>
     </div>
   );
 }
 
-export function CanvasToast({ text }: { text: string }) {
+export function CanvasToast({ text, onUndo }: { text: string; onUndo?: () => void }) {
   return (
-    <div role="status" className="inline-flex items-center gap-3 rounded-block border border-border-control bg-surface py-1.5 pr-1.5 pl-3.5 text-body shadow-surface">
+    <div role="status" className="inline-flex min-h-[42px] items-center gap-3 rounded-block border border-border-control bg-surface py-1.5 pr-1.5 pl-3.5 text-body shadow-surface">
       {text}
-      <KitButton variant="tertiary">Undo</KitButton>
+      {onUndo !== undefined && <KitButton variant="tertiary" onClick={onUndo}>Undo</KitButton>}
     </div>
   );
 }

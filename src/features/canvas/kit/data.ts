@@ -4,15 +4,19 @@ export interface IndicatorOption {
   name: string;
   short: string;
   fav?: boolean;
+  /** Trend / Momentum / Volume — the picker's category chips */
+  category?: string;
+  /** app: which indicator this is */
+  id?: string;
 }
 
 export const DEMO_INDICATORS: IndicatorOption[] = [
-  { name: 'Exponential Moving Average', short: 'EMA', fav: true },
-  { name: 'Simple Moving Average', short: 'SMA', fav: true },
-  { name: 'Relative Strength Index', short: 'RSI' },
-  { name: 'Weighted Moving Average', short: 'WMA' },
-  { name: 'Bollinger Bands', short: 'BB' },
-  { name: 'Volume Weighted Average Price', short: 'VWAP' },
+  { name: 'Exponential Moving Average', short: 'EMA', fav: true, category: 'Trend' },
+  { name: 'Simple Moving Average', short: 'SMA', fav: true, category: 'Trend' },
+  { name: 'Relative Strength Index', short: 'RSI', category: 'Momentum' },
+  { name: 'Weighted Moving Average', short: 'WMA', category: 'Trend' },
+  { name: 'Bollinger Bands', short: 'BB', category: 'Trend' },
+  { name: 'Volume Weighted Average Price', short: 'VWAP', category: 'Volume' },
 ];
 
 export type LogicWord = 'All of' | 'Any of' | 'None of';

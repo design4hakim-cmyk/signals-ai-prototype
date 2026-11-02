@@ -37,9 +37,11 @@ export interface FieldAtomProps {
   /** Storybook: force an editor state */
   force?: EditorState;
   onClick?: () => void;
+  /** operand: clicking the grey settings opens settings; clicking the name switches the indicator */
+  onDetailClick?: () => void;
 }
 
-export function FieldAtom({ kind, semantic = 'normal', label, detail, open = false, force, onClick }: FieldAtomProps) {
+export function FieldAtom({ kind, semantic = 'normal', label, detail, open = false, force, onClick, onDetailClick }: FieldAtomProps) {
   const disabled = semantic === 'disabled';
   const readonly = semantic === 'readonly';
   const { state, mode, props } = useEditorState(force ?? (open ? { selected: true } : undefined), disabled);
@@ -62,7 +64,30 @@ export function FieldAtom({ kind, semantic = 'normal', label, detail, open = fal
       <>
         {semantic === 'error' && <ErrorIcon />}
         <span>{label}</span>
-        {detail && <span className={`font-normal ${disabled ? '' : 'text-text-subtle'}`}>{detail}</span>}
+        {detail &&
+          (onDetailClick && !disabled ? (
+            <span
+              role="button"
+              tabIndex={0}
+              title="Edit settings"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDetailClick();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDetailClick();
+                }
+              }}
+              className="rounded-[4px] font-normal text-text-subtle outline-none hover:text-text-secondary hover:underline focus-visible:underline"
+            >
+              {detail}
+            </span>
+          ) : (
+            <span className={`font-normal ${disabled ? '' : 'text-text-subtle'}`}>{detail}</span>
+          ))}
         {(kind === 'logic' || kind === 'timing') && <ChevronDownIcon size={11} />}
       </>
     );

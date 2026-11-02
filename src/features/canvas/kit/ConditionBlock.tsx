@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { ChangedDot, Checkbox, CopilotBadge, DragHandle, Message, MoreButton } from './controls';
 import { DRAG_TILT, editorRing, type EditorState } from './editorRing';
 import { useEditorState } from './useEditorState';
@@ -41,6 +41,13 @@ export interface ConditionBlockProps {
   force?: EditorState;
   onToggleSelect?: (v: boolean) => void;
   label?: string;
+  /** app: the live ⋯ (with its menu) and ⋮⋮ (with drag listeners); stories use the plain ones */
+  moreSlot?: ReactNode;
+  handleSlot?: ReactNode;
+  /** keep ⋯ and ⋮⋮ visible, e.g. while the ⋯ menu is open */
+  keepControls?: boolean;
+  nodeId?: string;
+  blockRef?: Ref<HTMLDivElement>;
 }
 
 export function ConditionBlock({
@@ -54,25 +61,37 @@ export function ConditionBlock({
   force,
   onToggleSelect,
   label = 'Condition',
+  moreSlot,
+  handleSlot,
+  keepControls = false,
+  nodeId,
+  blockRef,
 }: ConditionBlockProps) {
   const disabled = look === 'disabled';
   const source = look === 'dragSource';
   const { state, mode, props } = useEditorState({ ...force, selected: selected || dragging || force?.selected, lifted: dragging }, disabled || source);
   const editor = mode === 'editor' && !disabled && !source;
   const engaged = state.inter !== 'default' || !!state.selected;
-  const showCheck = editor && (engaged || joinable === 'canJoin');
-  const showMenu = editor && engaged && !dragging;
+  // Controls show while the pointer is anywhere in the block (CSS group-hover), even over a field;
+  // the hover RING still marks only the innermost element.
+  const pinned = engaged || keepControls;
+  const showCheck = editor && !dragging;
+  const checkCls = pinned || joinable === 'canJoin' ? 'flex' : 'hidden group-hover/block:flex';
+  const showMenu = editor && !dragging;
+  const menuCls = pinned ? 'flex' : 'hidden group-hover/block:flex';
 
   return (
     <div className={`inline-flex flex-col gap-1.5 ${joinable === 'cantJoin' ? 'opacity-50' : ''}`}>
       <div
+        ref={blockRef}
+        data-node-id={nodeId}
         role="group"
         aria-label={label}
         aria-disabled={disabled || undefined}
         tabIndex={disabled ? -1 : 0}
         {...props}
         style={{ boxShadow: editorRing(state, mode, disabled || source), transform: dragging ? DRAG_TILT : undefined }}
-        className={`relative inline-flex w-max max-w-[640px] flex-wrap items-center gap-1.5 rounded-block border p-1.5 outline-none transition-shadow duration-100 ${OWN[look]} ${
+        className={`group/block relative inline-flex w-max max-w-[640px] flex-wrap items-center gap-1.5 rounded-block border p-1.5 outline-none transition-shadow duration-100 ${OWN[look]} ${
           disabled ? 'cursor-not-allowed text-text-disabled' : ''
         }`}
       >
@@ -86,12 +105,16 @@ export function ConditionBlock({
             <ChangedDot />
           </span>
         )}
-        {showCheck && <Checkbox label={`Select ${label}`} checked={!!state.selected && !dragging} onChange={onToggleSelect} />}
+        {showCheck && (
+          <span className={checkCls}>
+            <Checkbox label={`Select ${label}`} checked={!!state.selected} onChange={onToggleSelect} />
+          </span>
+        )}
         {children}
         {showMenu && (
-          <span className="ml-auto flex items-center gap-0.5 pl-1">
-            <MoreButton />
-            <DragHandle />
+          <span className={`ml-auto items-center gap-0.5 pl-1 ${menuCls}`}>
+            {moreSlot ?? <MoreButton />}
+            {handleSlot ?? <DragHandle />}
           </span>
         )}
       </div>

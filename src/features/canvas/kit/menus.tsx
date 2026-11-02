@@ -103,6 +103,8 @@ export function IndicatorPicker({
   keyboardRow,
   options = DEMO_INDICATORS,
   onPick,
+  valueDraft,
+  onValue,
 }: {
   query?: string;
   /** short name of the indicator already on the block (switching) */
@@ -112,14 +114,21 @@ export function IndicatorPicker({
   keyboardRow?: number;
   options?: IndicatorOption[];
   onPick?: (o: IndicatorOption) => void;
+  /** right side only: a fixed value like 50 instead of an indicator */
+  valueDraft?: string;
+  onValue?: (n: number) => void;
 }) {
   const [query, setQuery] = useState(initialQuery);
+  const [value, setValue] = useState(valueDraft ?? '');
+  const num = Number(value);
+  const valueOk = value.trim() !== '' && Number.isFinite(num);
   const [cat, setCat] = useState('All');
   const [favs, setFavs] = useState(() => new Set(options.filter((o) => o.fav).map((o) => o.short)));
   const q = query.trim();
   const list = options
-    .filter((o) => (cat === 'Favourites' ? favs.has(o.short) : true))
+    .filter((o) => (cat === 'Favourites' ? favs.has(o.short) : cat === 'All' || !o.category ? true : o.category === cat))
     .filter((o) => !q || o.name.toLowerCase().includes(q.toLowerCase()) || o.short.toLowerCase().includes(q.toLowerCase()));
+  if (cat === 'All' && !q) list.sort((a, b) => Number(favs.has(b.short)) - Number(favs.has(a.short)));
   // searching puts the keyboard on the first match
   const kb = keyboardRow ?? (q ? 0 : undefined);
 
@@ -131,6 +140,19 @@ export function IndicatorPicker({
           <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search indicators" aria-label="Search indicators" className="min-w-0 grow bg-transparent text-body text-text-primary outline-none placeholder:text-text-subtle" />
         </label>
       </div>
+      {onValue && (
+        <form
+          className="flex items-center gap-2 px-2.5 pb-1.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (valueOk) onValue(num);
+          }}
+        >
+          <span className="w-12 text-label text-text-tertiary">Value</span>
+          <TextInput value={value} onChange={(e) => setValue(e.target.value)} inputMode="decimal" placeholder="e.g. 50" aria-label="Value" width={120} />
+          <KitButton variant="secondary" type="submit" disabled={!valueOk}>Use</KitButton>
+        </form>
+      )}
       <div role="tablist" className="flex flex-wrap gap-1 px-2 pb-1">
         {CATEGORIES.map((c) => (
           <button key={c} type="button" role="tab" aria-selected={cat === c} onClick={() => setCat(c)} style={{ boxShadow: editorRing({ selected: cat === c }) }} className="h-6 rounded-chip bg-surface-selected px-2 text-label font-medium text-text-primary hover:bg-row-pressed">
@@ -145,7 +167,7 @@ export function IndicatorPicker({
         </div>
       ) : (
         <>
-          <SectionLabel>{q ? 'Matches' : 'Favourites & recent'}</SectionLabel>
+          <SectionLabel>{q ? 'Matches' : cat === 'All' ? 'Favourites & recent' : cat}</SectionLabel>
           <Rows>
             {list.map((o, i) => {
               const fav = favs.has(o.short);
@@ -175,20 +197,76 @@ export function IndicatorPicker({
 
 /* ── Indicator settings ────────────────────────────────────────── */
 
-export function IndicatorSettings({ name = 'EMA', length = '9', error, typing = false }: { name?: string; length?: string; error?: string; typing?: boolean }) {
+export interface SettingField {
+  key: string;
+  label: string;
+  value: string;
+  /** a dropdown instead of a number */
+  options?: string[];
+  error?: string;
+}
+
+/** Changes apply as you type; bad input shows the reason on the field and keeps the last good value. */
+export function IndicatorSettings({
+  name = 'EMA',
+  length = '9',
+  error,
+  typing = false,
+  fields,
+  onChange,
+  onClose,
+}: {
+  name?: string;
+  /** Storybook shortcut for the default EMA fields */
+  length?: string;
+  error?: string;
+  typing?: boolean;
+  fields?: SettingField[];
+  onChange?: (key: string, value: string) => void;
+  onClose?: () => void;
+}) {
+  const rows: SettingField[] = fields ?? [
+    { key: 'length', label: 'Length', value: length, error },
+    { key: 'source', label: 'Source', value: 'Close', options: ['Close', 'Open', 'High', 'Low'] },
+    { key: 'offset', label: 'Offset', value: '0' },
+  ];
   return (
-    <MenuSurface width={270} label={`${name} settings`}>
+    <MenuSurface width={280} label={`${name} settings`}>
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
         <span className="text-body font-semibold">{name} · settings</span>
-        <button type="button" aria-label="Close" className="text-text-secondary hover:text-text-primary"><CloseIcon size={14} /></button>
+        <button type="button" aria-label="Close" onClick={onClose} className="text-text-secondary hover:text-text-primary"><CloseIcon size={14} /></button>
       </div>
       <div className="grid grid-cols-[88px_auto] items-start gap-x-2 gap-y-2.5 px-4 pt-2 pb-4 text-body text-text-secondary">
-        <span className="pt-1">Length</span>
-        <TextInput defaultValue={length} error={error} force={typing || error ? { focused: true } : undefined} width={92} aria-label="Length" />
-        <span className="pt-1">Source</span>
-        <button type="button" className="flex h-7 w-[140px] items-center justify-between rounded-chip bg-surface-selected px-2 text-body font-medium text-text-primary">Close <span className="text-text-secondary">⌄</span></button>
-        <span className="pt-1">Offset</span>
-        <TextInput defaultValue="0" width={92} aria-label="Offset" />
+        {rows.length === 0 && <span className="col-span-2 text-label text-text-tertiary">Nothing to set for {name}.</span>}
+        {rows.map((f, i) => (
+          <div key={f.key} className="contents">
+            <span className="pt-1">{f.label}</span>
+            {f.options ? (
+              <span className="relative w-[140px]">
+                <select
+                  value={f.value}
+                  aria-label={f.label}
+                  onChange={(e) => onChange?.(f.key, e.target.value)}
+                  className="h-7 w-full appearance-none rounded-chip bg-surface-selected px-2 text-body font-medium text-text-primary outline-none"
+                >
+                  {f.options.map((o) => <option key={o}>{o}</option>)}
+                </select>
+                <span className="pointer-events-none absolute top-1 right-2 text-text-secondary">⌄</span>
+              </span>
+            ) : (
+              <TextInput
+                {...(onChange ? { value: f.value } : { defaultValue: f.value })}
+                onChange={(e) => onChange?.(f.key, e.target.value)}
+                inputMode="decimal"
+                error={f.error}
+                autoFocus={i === 0}
+                force={!onChange && (typing || f.error) && i === 0 ? { focused: true } : undefined}
+                width={92}
+                aria-label={f.label}
+              />
+            )}
+          </div>
+        ))}
       </div>
     </MenuSurface>
   );
@@ -216,23 +294,44 @@ export function RelationMenu({ current, hoverRow, onPick }: { current?: string; 
 
 /* ── Arithmetic ────────────────────────────────────────────────── */
 
-export function ArithmeticMenu({ on = 'SMA (Volume, 20)', op = '×', by = '1.5' }: { on?: string; op?: '+' | '−' | '×' | '÷'; by?: string }) {
+export function ArithmeticMenu({
+  on = 'SMA (Volume, 20)',
+  op = '×',
+  by = '1.5',
+  onChange,
+  onRemove,
+}: {
+  on?: string;
+  op?: '+' | '−' | '×' | '÷';
+  by?: string;
+  /** called with a valid operator + amount (as you type) */
+  onChange?: (op: '+' | '−' | '×' | '÷', by: number) => void;
+  onRemove?: () => void;
+}) {
   const [cur, setCur] = useState(op);
+  const [amount, setAmount] = useState(by);
+  const n = Number(amount);
+  const error = amount.trim() === '' ? undefined : !Number.isFinite(n) ? 'Type a number' : cur === '÷' && n === 0 ? "Can't divide by 0" : undefined;
+  const push = (o: typeof cur, a: string) => {
+    const v = Number(a);
+    if (a.trim() !== '' && Number.isFinite(v) && !(o === '÷' && v === 0)) onChange?.(o, v);
+  };
   return (
     <MenuSurface width={250} label="Arithmetic">
       <div className="flex flex-col gap-3 p-4">
         <span className="text-label text-text-tertiary">Maths on {on}</span>
         <div role="radiogroup" aria-label="Operator" className="flex gap-1">
           {(['+', '−', '×', '÷'] as const).map((o) => (
-            <button key={o} type="button" role="radio" aria-checked={cur === o} onClick={() => setCur(o)} style={{ boxShadow: editorRing({ selected: cur === o }) }} className="size-8 rounded-chip bg-surface-selected text-body-lg font-semibold text-text-primary hover:bg-row-pressed">
+            <button key={o} type="button" role="radio" aria-checked={cur === o} onClick={() => { setCur(o); push(o, amount); }} style={{ boxShadow: editorRing({ selected: cur === o }) }} className="size-8 rounded-chip bg-surface-selected text-body-lg font-semibold text-text-primary hover:bg-row-pressed">
               {o}
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-2 text-body text-text-secondary">
-          By <TextInput defaultValue={by} width={80} aria-label="By" />
+        <label className="flex items-start gap-2 text-body text-text-secondary">
+          <span className="pt-1">By</span>
+          <TextInput value={amount} onChange={(e) => { setAmount(e.target.value); push(cur, e.target.value); }} inputMode="decimal" error={error} autoFocus width={80} aria-label="By" />
         </label>
-        <div><KitButton variant="tertiary">Remove maths</KitButton></div>
+        {onRemove && <div><KitButton variant="tertiary" onClick={onRemove}>Remove maths</KitButton></div>}
       </div>
     </MenuSurface>
   );
@@ -255,12 +354,12 @@ export function LogicMenu({ current = 'Any of', onGroup = true, onPick }: { curr
 
 /* ── Timing chip ───────────────────────────────────────────────── */
 
-export function TimingMenu({ current = 'On candle close' }: { current?: string }) {
+export function TimingMenu({ current = 'On candle close', onPick }: { current?: string; onPick?: (t: 'On candle close' | 'During the candle') => void }) {
   return (
     <MenuSurface width={260} label="When to check">
       <Rows>
-        <MenuRow hint="Checks once each candle finishes" state={current === 'On candle close' ? 'current' : undefined}>On candle close</MenuRow>
-        <MenuRow hint="Checks on every price update; more signals, more noise" state={current === 'During the candle' ? 'current' : undefined}>During the candle</MenuRow>
+        <MenuRow hint="Checks once each candle finishes" state={current === 'On candle close' ? 'current' : undefined} onClick={() => onPick?.('On candle close')}>On candle close</MenuRow>
+        <MenuRow hint="Checks on every price update; more signals, more noise" state={current === 'During the candle' ? 'current' : undefined} onClick={() => onPick?.('During the candle')}>During the candle</MenuRow>
       </Rows>
     </MenuSurface>
   );
@@ -268,29 +367,36 @@ export function TimingMenu({ current = 'On candle close' }: { current?: string }
 
 /* ── ⋯ menus (rare actions only; Select is the checkbox, not here) ── */
 
-export function BlockMenu({ hoverRow }: { hoverRow?: number }) {
+export interface BlockMenuActions {
+  onDuplicate?: () => void;
+  onAddBelow?: () => void;
+  onCopy?: () => void;
+  onDelete?: () => void;
+}
+
+export function BlockMenu({ hoverRow, onDuplicate, onAddBelow, onCopy, onDelete }: { hoverRow?: number } & BlockMenuActions) {
   return (
     <MenuSurface width={220} label="Condition actions">
       <Rows>
-        <MenuRow shortcut="⌘D" state={hoverRow === 0 ? 'hover' : undefined}>Duplicate</MenuRow>
-        <MenuRow state={hoverRow === 1 ? 'hover' : undefined}>Add condition below</MenuRow>
-        <MenuRow shortcut="⌘C" state={hoverRow === 2 ? 'hover' : undefined}>Copy as text</MenuRow>
+        <MenuRow shortcut="⌘D" state={hoverRow === 0 ? 'hover' : undefined} onClick={onDuplicate}>Duplicate</MenuRow>
+        <MenuRow state={hoverRow === 1 ? 'hover' : undefined} onClick={onAddBelow}>Add condition below</MenuRow>
+        <MenuRow shortcut="⌘C" state={hoverRow === 2 ? 'hover' : undefined} onClick={onCopy}>Copy as text</MenuRow>
         <Divider />
-        <MenuRow destructive shortcut="⌫" state={hoverRow === 3 ? 'hover' : undefined}>Delete</MenuRow>
+        <MenuRow destructive shortcut="⌫" state={hoverRow === 3 ? 'hover' : undefined} onClick={onDelete}>Delete</MenuRow>
       </Rows>
     </MenuSurface>
   );
 }
 
-export function GroupMenu() {
+export function GroupMenu({ onAdd, onDuplicate, onUngroup, onDelete }: { onAdd?: () => void; onDuplicate?: () => void; onUngroup?: () => void; onDelete?: () => void }) {
   return (
     <MenuSurface width={240} label="Group actions">
       <Rows>
-        <MenuRow>Add condition to group</MenuRow>
-        <MenuRow shortcut="⌘D">Duplicate group</MenuRow>
-        <MenuRow hint="Conditions move up a level">Ungroup</MenuRow>
+        <MenuRow onClick={onAdd}>Add condition to group</MenuRow>
+        <MenuRow shortcut="⌘D" onClick={onDuplicate}>Duplicate group</MenuRow>
+        <MenuRow hint="Conditions move up a level" onClick={onUngroup}>Ungroup</MenuRow>
         <Divider />
-        <MenuRow destructive shortcut="⌫" hint="Deletes its conditions too · Undo">Delete group</MenuRow>
+        <MenuRow destructive shortcut="⌫" hint="Deletes its conditions too · Undo" onClick={onDelete}>Delete group</MenuRow>
       </Rows>
     </MenuSurface>
   );
