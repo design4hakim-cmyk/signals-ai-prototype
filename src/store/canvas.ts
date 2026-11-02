@@ -8,7 +8,12 @@ import {
   findNode,
   findParent,
   firstUnfinished,
+  fitsIn,
+  flatConditions,
   groupNodes,
+  heightOf,
+  levelOf,
+  MAX_DEPTH,
   insertAt,
   logicName,
   moveNode,
@@ -18,7 +23,7 @@ import {
   ungroup,
 } from '@/lib/conditions';
 import { emptyStrategy } from '@/mock/strategies';
-import type { Condition, Logic, MathStep, Operand, Relation, Side, StrategyNode, StrategyTree } from '@/types/strategy';
+import type { Condition, IndicatorParams, Logic, MathStep, Operand, Relation, Side, StrategyNode, StrategyTree, Timing } from '@/types/strategy';
 import { useStrategy } from './strategy';
 import { useWorkspace } from './workspace';
 
@@ -73,6 +78,7 @@ interface CanvasState extends StrategyTree {
   frames: { entry: FramePos; exit: FramePos | null };
   view: View;
   history: StrategyTree[];
+  timing: Record<Side, Timing>;
   toast: CanvasToast | null;
 
   load: (t: StrategyTree) => void;
@@ -81,10 +87,14 @@ interface CanvasState extends StrategyTree {
   setOperand: (id: string, which: 'left' | 'right', o: Operand) => void;
   setRelation: (id: string, r: Relation) => void;
   setMath: (id: string, which: 'left' | 'right', m: MathStep | null) => void;
+  /** settings typed in the settings popover; `counts` = the first change of this edit */
+  setParams: (id: string, which: 'left' | 'right', p: IndicatorParams, counts: boolean) => void;
   setLogic: (groupId: string, l: Logic) => void;
   duplicate: (ids: string[]) => void;
   remove: (ids: string[]) => void;
   group: (ids: string[], l: Logic) => void;
+  setTiming: (side: Side, t: Timing) => void;
+  copyAsText: (ids: string[]) => void;
   ungroup: (groupId: string) => void;
   move: (id: string, parentId: string, index: number) => void;
   undo: () => void;
@@ -129,7 +139,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
   const showToast = (text: string, undo = true) => {
     clearTimeout(toastTimer);
     set({ toast: { text, undo } });
-    toastTimer = setTimeout(() => set({ toast: null }), 6000);
+    toastTimer = setTimeout(() => set({ toast: null }), 8000); // Undo stays 8 seconds
   };
 
   const updateCond = (id: string, patch: Partial<Condition>, description: string, editor: Editor | null) => {
@@ -137,7 +147,8 @@ export const useCanvas = create<CanvasState>((set, get) => {
     const c = condOf(t, id);
     if (!c) return;
     const fillsEmptySlot = Object.keys(patch).every((k) => c[k as keyof Condition] === null);
-    commit(replaceNode(t, id, { ...c, ...patch }), description, { editor }, fillsEmptySlot ? 0 : 1);
+    // your own edit turns a Copilot block into a normal one (✦ goes away)
+    commit(replaceNode(t, id, { ...c, ...patch, copilot: false }), description, { editor }, fillsEmptySlot ? 0 : 1);
   };
 
   return {
@@ -149,6 +160,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
     frames: { entry: { x: 48, y: 32 }, exit: null },
     view: { x: 0, y: 0, zoom: 1 },
     history: [],
+    timing: { entry: 'close', exit: 'close' },
     toast: null,
 
     load: (t) => {
@@ -203,6 +215,15 @@ export const useCanvas = create<CanvasState>((set, get) => {
       updateCond(id, { [which]: { ...o, math: math ?? undefined } }, `${math ? 'set' : 'removed'} arithmetic in ${describeCondition(c)}`, null);
     },
 
+    setParams: (id, which, params, counts) => {
+      const t = treeOf(get());
+      const c = condOf(t, id);
+      const o = c?.[which];
+      if (!c || !o || o.type !== 'indicator') return;
+      const next = { ...c, [which]: { ...o, params }, copilot: false };
+      commit(replaceNode(t, id, next), `changed settings of ${describeCondition(c)}`, {}, counts ? 1 : 0);
+    },
+
     setLogic: (groupId, logic) => {
       const t = treeOf(get());
       const g = nodeOf(t, groupId);
@@ -227,31 +248,60 @@ export const useCanvas = create<CanvasState>((set, get) => {
     // Delete is instant, with Undo (E05)
     remove: (ids) => {
       const t = treeOf(get());
-      const what = ids.length > 1 ? `${ids.length} conditions` : nodeText(nodeOf(t, ids[0]));
+      const one = ids.length === 1 ? nodeOf(t, ids[0]) : null;
+      // "Deleted Any of group · 2 conditions" — a group goes with its conditions, in one step
+      const what = one?.kind === 'group' ? `${nodeText(one)} · ${flatConditions(one).length} conditions` : one ? nodeText(one) : `${ids.length} items`;
       commit(removeNodes(t, ids), `removed ${what}`, { editor: null, selected: [] });
       showToast(`Deleted ${what}`);
     },
 
     group: (ids, logic) => {
-      const res = groupNodes(treeOf(get()), ids, logic);
+      const t = treeOf(get());
+      const parent = findParent(t.entry, ids[0]) ?? findParent(t.exit, ids[0]);
+      if (!parent) return;
+      // ticking everything in a box = just changing that box's logic
+      const isRoot = parent.id === t.entry.id || parent.id === t.exit.id;
+      if (!isRoot && ids.length === parent.children.length) return get().setLogic(parent.id, logic);
+      // the new box sits one level below its parent; nothing inside may go past 2 levels
+      const tallest = Math.max(0, ...ids.map((id) => heightOf(nodeOf(t, id)!)));
+      if (levelOf(t, parent.id) + 1 + tallest > MAX_DEPTH) return;
+      const res = groupNodes(t, ids, logic);
       if (!res) return;
       commit(res.tree, `grouped ${ids.length} conditions as ${logicName(logic)}`, { editor: null, selected: [] });
       showToast(`Grouped ${ids.length} conditions as ${logicName(logic)}`);
     },
 
     ungroup: (groupId) => {
-      commit(ungroup(treeOf(get()), groupId), 'ungrouped a box', { editor: null });
+      commit(ungroup(treeOf(get()), groupId), 'ungrouped a group', { editor: null });
       showToast('Ungrouped');
     },
 
     // Drag by ⋮⋮ (E09)
     move: (id, parentId, index) => {
       const t = treeOf(get());
+      const node = nodeOf(t, id);
+      if (!node || !fitsIn(t, node, parentId)) return; // too deep: nothing moves
       const next = moveNode(t, id, parentId, index);
       if (next === t) return;
       const target = nodeOf(t, parentId);
       const into = target?.kind === 'group' && t.entry.id !== parentId && t.exit.id !== parentId ? ` into ${logicName(target.logic)}` : '';
       commit(next, `moved ${nodeText(nodeOf(t, id))}${into}`, { editor: null });
+    },
+
+    setTiming: (side, timing) => {
+      if (get().timing[side] === timing) return set({ editor: null });
+      set((s) => ({ timing: { ...s.timing, [side]: timing }, editor: null }));
+      useStrategy.getState().edit(`${sideName(side)} now checks ${timing === 'close' ? 'on candle close' : 'during the candle'}`);
+    },
+
+    // ⌘C: plain words, one condition per line, groups indented
+    copyAsText: (ids) => {
+      const t = treeOf(get());
+      const line = (n: StrategyNode, pad: string): string =>
+        n.kind === 'cond' ? `${pad}${describeCondition(n)}` : [`${pad}${logicName(n.logic)}:`, ...n.children.map((c) => line(c, pad + '  '))].join('\n');
+      const text = ids.map((id) => nodeOf(t, id)).filter(Boolean).map((n) => line(n!, '')).join('\n');
+      void navigator.clipboard?.writeText(text).catch(() => undefined);
+      showToast(ids.length > 1 ? `Copied ${ids.length} items as text` : 'Copied as text', false);
     },
 
     undo: () => {
