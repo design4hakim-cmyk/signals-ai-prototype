@@ -34,6 +34,7 @@ const withStrategy = (t: StrategyTree = demoStrategy()) => {
 /** Find a condition by reading order on a side (1 = first), for opening menus on it. */
 const nth = (side: 'entry' | 'exit', n: number) => flatConditions(C()[side])[n - 1].id;
 const openOn = (id: string, part: EditorPart) => C().openEditor(id, part);
+const EMA9 = { type: 'indicator' as const, id: 'ema' as const, params: { length: 9, source: 'Close' as const, offset: 0 } };
 
 /** A saved strategy with an entry, whose 3 setups are backtested and current. */
 const savedWithResults = () => {
@@ -55,35 +56,28 @@ const LIVE = [
 
 const GROUPS: { title: string; items: [string, () => void][] }[] = [
   {
-    title: 'Canvas builder · by hand',
+    title: 'Canvas builder · by hand (kit)',
     items: [
-      ['B02 · New condition, pick indicator 1', () => { resetAll(); C().addCondition('entry'); }],
-      ['B03 · Indicator settings', () => { resetAll(); C().addCondition('entry'); const id = nth('entry', 1); C().setOperand(id, 'left', { type: 'indicator', id: 'ema', params: { length: 9, source: 'Close', offset: 0 } }); openOn(id, 'leftSettings'); }],
-      ['B04 · Arithmetic on an indicator', () => { resetAll(); C().addCondition('entry'); const id = nth('entry', 1); C().setOperand(id, 'left', { type: 'indicator', id: 'ema', params: { length: 9, source: 'Close', offset: 0 } }); openOn(id, 'leftMath'); }],
-      ['B05 · Pick the relation', () => { resetAll(); C().addCondition('entry'); const id = nth('entry', 1); C().setOperand(id, 'left', { type: 'indicator', id: 'ema', params: { length: 9, source: 'Close', offset: 0 } }); }],
-      ['B06 · Pick indicator 2', () => { resetAll(); C().addCondition('entry'); const id = nth('entry', 1); C().setOperand(id, 'left', { type: 'indicator', id: 'ema', params: { length: 9, source: 'Close', offset: 0 } }); C().setRelation(id, 'Cross Above'); }],
-      ['B07 · Two conditions, AND or OR', () => { withStrategy(); openOn(C().entry.id, 'logic'); }],
-      ['B08 · Complex, 8 conditions nested', () => withStrategy(complexStrategy())],
-      ['E01 · Four conditions (hover one)', () => withStrategy(editingStrategy())],
-      ['E02 · Switch an indicator', () => { withStrategy(editingStrategy()); openOn(nth('entry', 2), 'left'); }],
-      ['E03 · Edit settings', () => { withStrategy(editingStrategy()); openOn(nth('entry', 2), 'leftSettings'); }],
-      ['E04 · ⋯ menu', () => { withStrategy(editingStrategy()); openOn(nth('entry', 2), 'more'); }],
-      ['E05 · Deleted, with Undo', () => { withStrategy(editingStrategy()); C().remove([nth('entry', 2)]); }],
-      ['E06 · Two selected', () => { withStrategy(editingStrategy()); C().toggleSelect(nth('entry', 3)); C().toggleSelect(nth('entry', 4)); }],
-      ['E07 · Grouped, with Undo', () => { withStrategy(editingStrategy()); C().group([nth('entry', 3), nth('entry', 4)], 'OR'); }],
-      ['E08 · Group menu', () => { withStrategy(groupedStrategy()); const g = C().entry.children[2]; openOn(g.id, 'groupMenu'); }],
-      ['E09 · Ready to drag into a group (use ⋮⋮)', () => withStrategy(groupedStrategy())],
-      ['U01 · Editing pauses the chart', () => { withStrategy(); C().setRelation(nth('entry', 2), 'Greater Than Equal To'); C().setMath(nth('entry', 1), 'right', { op: '×', value: 1.01 }); }],
-      ['U02 · Half-built condition blocks update', () => { withStrategy(); C().addCondition('entry'); const id = nth('entry', 3); C().setOperand(id, 'left', { type: 'indicator', id: 'price', params: { source: 'Close' } }); C().setRelation(id, 'Cross Above'); C().closeEditor(); }],
-    ],
-  },
-  {
-    title: 'Canvas · zoom, select, move',
-    items: [
-      ['Z1 · Big strategy, zoomed out to 50%', () => { withStrategy(complexStrategy()); C().setView({ x: 0, y: 0, zoom: 0.5 }); }],
-      ['Z2 · Entry frame selected (drag title / arrows)', () => { withStrategy(); C().selectFrame('entry'); }],
-      ['Z3 · Group selected (drag, or ↑ ↓)', () => { withStrategy(groupedStrategy()); C().selectOnly([C().entry.children[2].id]); }],
-      ['Z4 · Block selected (drag, or ↑ ↓)', () => { withStrategy(editingStrategy()); C().selectOnly([nth('entry', 2)]); }],
+      ['1 · Empty: + Add Entry Condition', resetAll],
+      ['2 · New block, picking indicator', () => { resetAll(); C().addCondition('entry'); }],
+      ['3 · Picking the relation', () => { resetAll(); C().addCondition('entry'); C().setOperand(nth('entry', 1), 'left', EMA9); }],
+      ['4 · Indicator or value', () => { resetAll(); C().addCondition('entry'); const id = nth('entry', 1); C().setOperand(id, 'left', EMA9); C().setRelation(id, 'Cross Above'); }],
+      ['5 · Settings open (apply as you type)', () => { withStrategy(); openOn(nth('entry', 1), 'leftSettings'); }],
+      ['6 · Arithmetic open', () => { withStrategy(); openOn(nth('entry', 1), 'rightMath'); }],
+      ['7 · Two conditions, root logic menu', () => { withStrategy(); openOn(C().entry.id, 'logic'); }],
+      ['8 · Many conditions: All of / Any of / None of', () => withStrategy(complexStrategy())],
+      ['9 · Block ⋯ menu', () => { withStrategy(editingStrategy()); openOn(nth('entry', 2), 'more'); }],
+      ['10 · Deleted, with Undo', () => { withStrategy(editingStrategy()); C().remove([nth('entry', 2)]); }],
+      ['11 · One ticked: siblings can join, rest dims', () => { withStrategy(groupedStrategy()); C().toggleSelect(nth('entry', 3)); }],
+      ['12 · Two ticked: group as…', () => { withStrategy(editingStrategy()); C().toggleSelect(nth('entry', 3)); C().toggleSelect(nth('entry', 4)); }],
+      ['13 · Grouped, with Undo', () => { withStrategy(editingStrategy()); C().group([nth('entry', 3), nth('entry', 4)], 'OR'); }],
+      ['14 · Group ⋯ menu', () => { withStrategy(groupedStrategy()); openOn(C().entry.children[2].id, 'more'); }],
+      ['15 · Ready to drag (use ⋮⋮)', () => withStrategy(groupedStrategy())],
+      ['16 · Copilot block (✦ until you edit it)', () => { const t = demoStrategy(); const c = t.entry.children[1]; if (c.kind === 'cond') c.copilot = true; withStrategy(t); }],
+      ['17 · Editing pauses the chart (changed dots)', () => { withStrategy(); C().setRelation(nth('entry', 2), 'Greater Than or Equal'); C().setMath(nth('entry', 1), 'right', { op: '×', value: 1.01 }); }],
+      ['18 · Half built: red field, update blocked', () => { withStrategy(); C().addCondition('entry'); const id = nth('entry', 3); C().setOperand(id, 'left', { type: 'indicator', id: 'price', params: { source: 'Close' } }); C().setRelation(id, 'Cross Above'); C().closeEditor(); }],
+      ['19 · Big strategy, zoomed out to 50%', () => { withStrategy(complexStrategy()); C().setView({ x: 0, y: 0, zoom: 0.5 }); }],
+      ['20 · Entry section selected (drag title / arrows)', () => { withStrategy(); C().selectFrame('entry'); }],
     ],
   },
   {
