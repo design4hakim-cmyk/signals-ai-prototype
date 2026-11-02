@@ -1,14 +1,19 @@
-import { useBacktest, type Results, type Setup } from '@/store/backtest';
+import { rupees } from '@/lib/backtestData';
+import { useBacktest, type Setup } from '@/store/backtest';
 import { useWorkspace } from '@/store/workspace';
+import { NoTrades, ResultsPage, RunningResults } from './results/ResultsPage';
 
 /*
   Layer 5 · Results — the answer.
-  Empty · loading (skeleton) · current · faded when outdated · change pills after an update · failed.
+  Empty · running (skeleton) · current = the full results page (design/backtest-results) ·
+  faded + banner when outdated · failed: partial results + banner, or the reason when there's nothing.
 */
 
-const METRICS: { key: keyof Results; label: string; fmt: (n: number) => string; higherIsBetter: boolean }[] = [
-  { key: 'netPnl', label: 'NET P&L', fmt: (n) => `₹${n.toLocaleString('en-IN')}`, higherIsBetter: true },
-  { key: 'maxDrawdown', label: 'MAX DRAWDOWN', fmt: (n) => `₹${n.toLocaleString('en-IN')}`, higherIsBetter: false },
+type MetricKey = 'netPnl' | 'maxDrawdown' | 'winRate' | 'trades';
+// drawdown is negative ₹, so a higher (shallower) number is better too
+const METRICS: { key: MetricKey; label: string; fmt: (n: number) => string; higherIsBetter: boolean }[] = [
+  { key: 'netPnl', label: 'NET P&L', fmt: (n) => rupees(n), higherIsBetter: true },
+  { key: 'maxDrawdown', label: 'MAX DRAWDOWN', fmt: (n) => rupees(n), higherIsBetter: true },
   { key: 'winRate', label: 'WIN RATE', fmt: (n) => `${n}%`, higherIsBetter: true },
   { key: 'trades', label: 'TRADES', fmt: (n) => String(n), higherIsBetter: true },
 ];
@@ -18,7 +23,8 @@ export function ResultsPanel({ setup }: { setup: Setup }) {
   const setPeriod = useWorkspace((s) => s.setPeriod);
   const runBacktests = useBacktest((s) => s.runBacktests);
 
-  if (setup.status === 'failed' && setup.error)
+  // failed with nothing to show: say why and offer the way out (partial results go to the page below)
+  if (setup.status === 'failed' && setup.error && !setup.results)
     return (
       <div className="flex flex-col items-start gap-2 px-5 py-6">
         <span className="text-body-lg font-semibold">Couldn't backtest {setup.name}</span>
@@ -53,40 +59,9 @@ export function ResultsPanel({ setup }: { setup: Setup }) {
       </div>
     );
 
-  const faded = setup.status === 'outdated';
-  return (
-    <div className={`grid grid-cols-4 gap-px bg-border-subtle transition-opacity ${faded ? 'opacity-45' : ''}`}>
-      {METRICS.map((m) => {
-        const now = setup.results?.[m.key];
-        const before = setup.previous?.[m.key];
-        return (
-          <div key={m.key} className="flex flex-col gap-1 bg-surface px-5 py-4">
-            <span className="text-[11px] font-semibold text-text-tertiary">{m.label}</span>
-            {loading || now === undefined ? (
-              <span className="mt-1 h-6 w-28 animate-pulse rounded-chip bg-surface-selected" />
-            ) : (
-              <span className="flex items-baseline gap-2">
-                <span className="text-[20px] font-semibold tabular-nums">{m.fmt(now)}</span>
-                {before !== undefined && setup.status === 'current' && <ChangePill now={now} before={before} good={m.higherIsBetter} />}
-              </span>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function ChangePill({ now, before, good }: { now: number; before: number; good: boolean }) {
-  if (now === before) return <span className="text-hint text-text-subtle">No change</span>;
-  const pct = ((now - before) / Math.abs(before)) * 100;
-  const up = pct > 0;
-  const better = up === good;
-  return (
-    <span className={`rounded-[4px] px-1.5 text-hint font-semibold ${better ? 'bg-buy-tint text-pnl-up' : 'bg-sell-tint text-pnl-down'}`}>
-      {up ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%
-    </span>
-  );
+  if (loading) return <RunningResults />;
+  if (setup.results?.noTrades) return <NoTrades />;
+  return <ResultsPage setup={setup} />;
 }
 
 /** Compare tab: every setup side by side. */

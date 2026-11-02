@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { SAVED_LIBRARY, useBacktest } from '@/store/backtest';
+import { ALL_TRADES, monteCarlo, MONTE_CARLO } from '@/lib/backtestData';
+import { useResultsView } from '@/store/results';
 import { useStrategy } from '@/store/strategy';
 import { useWorkspace } from '@/store/workspace';
 
@@ -13,6 +15,7 @@ const resetAll = () => {
   useStrategy.setState(useStrategy.getInitialState(), true);
   useWorkspace.setState(useWorkspace.getInitialState(), true);
   useBacktest.setState(useBacktest.getInitialState(), true);
+  useResultsView.getState().reset();
 };
 const S = () => useStrategy.getState();
 const W = () => useWorkspace.getState();
@@ -36,7 +39,44 @@ const LIVE = [
   { id: 'l3', setup: 'Short Straddle', broker: 'Broker ••42', pnl: 1120, status: 'Paused' as const },
 ];
 
+/** Backtest tab with Short Straddle (the real run) and Iron Condor, both current. */
+const RV = () => useResultsView.getState();
+const results = (patch?: (id: string) => void) => {
+  resetAll();
+  S().set({ entry: 'complete', name: 'Nifty 09:17 Straddle', saved: true, mode: 'backtest' });
+  B().addSaved(['saved-ss', 'saved-ic']);
+  B().seedResults();
+  const ss = B().setups.find((x) => x.name === 'Short Straddle')!;
+  B().select(ss.id);
+  patch?.(ss.id);
+};
+const patchSetup = (id: string, p: Partial<ReturnType<typeof B>['setups'][number]>) =>
+  B().set({ setups: B().setups.map((x) => (x.id === id ? { ...x, ...p } : x)) });
+
 const GROUPS: { title: string; items: [string, () => void][] }[] = [
+  {
+    title: 'Backtest results (BT-Results-States)',
+    items: [
+      ['R1 · Full results page', () => results()],
+      ['R2 · Running (skeleton + progress)', () => results((id) => patchSetup(id, { status: 'running' }))],
+      ['R3 · Out of date (faded + Update backtest)', () => { results(); S().edit('changed RSI (14) > 50 → 60 in Entry'); }],
+      ['R4 · No trades in this period', () => results((id) => patchSetup(id, { results: { netPnl: 0, maxDrawdown: 0, winRate: 0, trades: 0, noTrades: true } }))],
+      ['R5 · Failed, partial results kept', () => results((id) => patchSetup(id, { status: 'failed', error: { reason: 'data for 12 Mar 2026 is missing. Results stop at 11 Mar.', partialUntil: '2026-03-11' } }))],
+      ['R6 · VIX filter open', () => { results(); RV().set({ vixOpen: true }); }],
+      ['R7 · VIX 12 – 20 applied (158 trades)', () => { results(); RV().set({ vix: [12, 20] }); }],
+      ['R8 · Equity curve hover (20 Apr 2026)', () => { results(); setTimeout(() => RV().set({ hoverDate: '2026-04-20' }), 300); }],
+      ['R9 · Out-of-sample shown on the chart', () => { results(); RV().set({ splitOnChart: true }); }],
+      ['R10 · Heatmap hover (April 2026)', () => { results(); RV().set({ hoverCell: { year: 2026, month: 3 } }); }],
+      ['R11 · Monte Carlo running', () => { results(); RV().set({ mc: { phase: 'running', done: 6200 } }); }],
+      ['R12 · Monte Carlo result', () => {
+        results();
+        void monteCarlo(ALL_TRADES, MONTE_CARLO.simulations, () => {}).then((sorted) => sorted && RV().set({ mc: { phase: 'result', sorted } }));
+      }],
+      ['R13 · Trades collapsed, sort menu open', () => { results(); RV().set({ expanded: [], sortOpen: true }); }],
+      ['R14 · Trades sorted by P&L, worst first', () => { results(); RV().set({ sort: { key: 'pnl', dir: 'asc' }, expanded: [] }); }],
+      ['R15 · After an update (change pills)', () => results((id) => patchSetup(id, { previous: { netPnl: -31200, winRate: 45.2, maxDrawdown: -55400, trades: 246 } }))],
+    ],
+  },
   {
     title: 'Top nav · through the flow',
     items: [

@@ -52,12 +52,12 @@ src/
     canvas/                strategy canvas (static preview until the builder phase)
     bottom-bar/            K11–K12 (chart/signals tabs, update chart, log, limits)
     chart/PriceChart.tsx   Lightweight Charts wrapper (+ entry/exit markers)
-    backtest/              SetupBlock-Unified sheet
+    backtest/              SetupBlock-Unified sheet; results/ = the full results page (design/backtest-results), grown from ResultsPanel
     copilot/               Copilot panel
     scenarios/             ◐ Scenarios switcher. PROTOTYPE ONLY review helper
-  store/                   Zustand stores: workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups)
+  store/                   Zustand stores: workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups), results (how the results page is viewed: VIX filter, sort, Monte Carlo)
   mock/                    dummy data: seeded candles, instruments, Copilot starters
-  lib/                     pure logic: signals (EMA 9×21 + limits), describeChartData
+  lib/                     pure logic: signals (EMA 9×21 + limits), describeChartData, backtestData (results maths from mock-results.json)
 ```
 
 ## Behaviour already decided (keep consistent)

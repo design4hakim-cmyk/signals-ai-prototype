@@ -1,12 +1,18 @@
 import { useState } from 'react';
 import { Button, IconButton } from '@/components/ui/Button';
 import { ArrowIcon, CopilotIcon, HistoryIcon, MicIcon, PlusIcon } from '@/components/ui/icons';
+import { copilotTake, kiloRupees, resultsView, variantFor } from '@/lib/backtestData';
 import { copilotStarters, mockUser } from '@/mock/copilot';
+import { useBacktest } from '@/store/backtest';
+import { useStrategy } from '@/store/strategy';
 
 /** Right panel: Signals Copilot, empty state (420px wide) */
 export function CopilotPanel() {
   const [draft, setDraft] = useState('');
   const canSend = draft.trim().length > 0;
+  const mode = useStrategy((s) => s.mode);
+  const active = useBacktest((s) => s.setups.find((x) => x.id === s.activeId));
+  const ready = mode === 'backtest' && active?.status === 'current' && active.results && !active.results.noTrades ? active : null;
 
   return (
     <aside aria-label="Signals Copilot" className="flex w-copilot shrink-0 flex-col">
@@ -27,6 +33,9 @@ export function CopilotPanel() {
         </IconButton>
       </div>
 
+      {ready ? (
+        <BacktestReady name={ready.name} onAsk={setDraft} />
+      ) : (
       <div className="flex min-h-0 grow flex-col justify-center gap-5 overflow-auto px-[22px]">
         <div className="flex flex-col items-center gap-1.5 text-center">
           <p className="m-0 text-display font-semibold">What should we build, {mockUser.firstName}?</p>
@@ -49,6 +58,7 @@ export function CopilotPanel() {
           ))}
         </ul>
       </div>
+      )}
 
       <div className="shrink-0 px-4 pt-3 pb-2.5">
         <div className="flex flex-col gap-2 rounded-card border-[1.5px] border-ai-border px-3 py-2.5 focus-within:border-ai">
@@ -87,5 +97,33 @@ export function CopilotPanel() {
         </p>
       </div>
     </aside>
+  );
+}
+
+/** After a backtest: a mini summary, one plain-language insight, three follow-ups (design/backtest-results). */
+function BacktestReady({ name, onAsk }: { name: string; onAsk: (q: string) => void }) {
+  const variant = variantFor(name);
+  const view = resultsView({ variant });
+  const s = view.stats;
+  const take = copilotTake(view, variant);
+  return (
+    <div className="flex min-h-0 grow flex-col gap-3 overflow-auto px-4 pt-4">
+      <section className="flex flex-col gap-2.5 rounded-card border border-border-divider p-3.5">
+        <h3 className="m-0 text-body font-semibold">Backtest ready · {name}</h3>
+        <span className="flex flex-wrap gap-x-3.5 gap-y-1 rounded-control bg-surface-hover px-2.5 py-1.5 text-label tabular-nums">
+          <span>Net <b className={`font-semibold ${s.profit < 0 ? 'text-pnl-down' : 'text-pnl-up'}`}>{kiloRupees(s.profit)}</b></span>
+          <span>Win {Math.round(s.win)}%</span>
+          <span>Max DD <b className="font-semibold text-pnl-down">{kiloRupees(s.mdd)}</b></span>
+        </span>
+        <p className="m-0 text-body text-text-secondary">{take.insight}</p>
+      </section>
+      <div className="flex flex-wrap gap-2">
+        {take.chips.map((c) => (
+          <button key={c} type="button" onClick={() => onAsk(c)} className="h-7 rounded-pill border border-border-control bg-surface px-3 text-label hover:border-ai-border hover:bg-ai-tint">
+            {c}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
