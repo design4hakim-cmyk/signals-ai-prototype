@@ -47,7 +47,9 @@ function Chip({ kind, trades }: { kind: 'forward' | 'live'; trades: RunningTrade
           }`}
         >
           {kind === 'live' && <span className="size-[7px] rounded-full bg-buy" />}
-          {label}
+          {/* short form when the builder is narrow, e.g. with My Strategies pinned */}
+          <span className="@max-[980px]:hidden">{label}</span>
+          <span className="hidden @max-[980px]:inline">{kind === 'forward' ? `${trades.length} FT` : label}</span>
           <span className={`transition-transform ${open ? 'rotate-180' : ''}`}>
             <ChevronDownIcon size={11} />
           </span>

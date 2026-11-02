@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronDownIcon, FolderIcon } from '@/components/ui/icons';
 import { Popover } from '@/components/ui/Popover';
 import { resultsCurrent, useBacktest } from '@/store/backtest';
+import { useLibrary } from '@/store/library';
 import { useStrategy } from '@/store/strategy';
 import { useWorkspace } from '@/store/workspace';
 import type { Period } from '@/types/market';
@@ -33,8 +34,11 @@ export function TopNav() {
   const onUpdate = () => (st.liveTrades.length ? setDialog('live') : st.save());
   const onTrade = () => {
     if (st.dirty || (!st.saved && st.entry !== 'empty')) return setDialog('unsaved');
-    st.showToast('The Trade popup (Forward test / Live) comes in the Trade phase');
+    // the same Trade popup as My Strategies' Trade
+    useLibrary.setState({ tradeFor: { id: useLibrary.getState().openId, name: st.name ?? 'Untitled strategy' } });
   };
+  const panel = useLibrary((s) => s.mode);
+  const { setMode } = useLibrary.getState();
 
   return (
     <header className="grid h-topbar shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(max-content,1fr)] items-center gap-4 border-b border-border-divider pr-5 pl-4">
@@ -42,9 +46,13 @@ export function TopNav() {
       <div className="flex min-w-0 items-center gap-2.5">
         <button
           type="button"
-          aria-label="Saved strategies"
-          title="Saved strategies"
-          className="flex size-8 shrink-0 items-center justify-center rounded-segment-item text-text-primary hover:bg-surface-selected"
+          aria-label="My Strategies"
+          title="My Strategies · hover to peek, click to pin"
+          aria-pressed={panel === 'pinned'}
+          // hover peeks, click pins (or closes a pinned panel)
+          onMouseEnter={() => panel === 'closed' && setMode('peek')}
+          onClick={() => setMode(panel === 'pinned' ? 'closed' : 'pinned')}
+          className={`flex size-8 shrink-0 items-center justify-center rounded-segment-item text-text-primary hover:bg-surface-selected focus-visible:shadow-focus-ring ${panel === 'pinned' ? 'bg-surface-selected' : ''}`}
         >
           <FolderIcon />
         </button>
@@ -138,7 +146,7 @@ function ModeSwitch({ dot, locked }: { dot: boolean; locked: boolean }) {
 
 const PERIODS: Period[] = ['1M', '3M', '6M', '1Y', '3Y'];
 
-/** Quiet text button. Locks while a backtest runs. The "Period" label drops in narrow windows. */
+/** Quiet text button. Locks while a backtest runs. The "Period" label drops when the window or the builder is narrow. */
 function PeriodMenu({ locked }: { locked: boolean }) {
   const period = useWorkspace((s) => s.period);
   const setPeriod = useWorkspace((s) => s.setPeriod);
@@ -159,7 +167,7 @@ function PeriodMenu({ locked }: { locked: boolean }) {
             open ? 'bg-surface-selected' : 'enabled:hover:bg-surface-selected'
           }`}
         >
-          <span className="max-[1380px]:hidden">Period</span>
+          <span className="@max-[980px]:hidden max-[1380px]:hidden">Period</span>
           <b className="font-semibold text-text-primary">{period}</b>
           <ChevronDownIcon size={12} />
         </button>
