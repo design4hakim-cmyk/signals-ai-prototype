@@ -48,6 +48,8 @@ src/
     top-nav/               TopNav-Components sheet
     context-bar/           K01–K10 (instrument, chart data dialog, timeframe)
     canvas/                strategy canvas (static preview until the builder phase)
+    canvas/kit/            canvas builder components from design/canvas-builder (Storybook: "Canvas builder/…").
+                           All rings come from kit/editorRing.ts — never compute a ring anywhere else.
     bottom-bar/            K11–K12 (chart/signals tabs, update chart, log, limits)
     chart/PriceChart.tsx   Lightweight Charts wrapper (+ entry/exit markers)
     backtest/              SetupBlock-Unified sheet
@@ -82,6 +84,7 @@ npm install            # once, and after adding libraries
 npm run dev            # app at http://localhost:5173 (live reload)
 npm run build          # type-check + production build
 npm run storybook      # components at http://localhost:6006
+                       # (also published with every Vercel preview at <preview-url>/storybook/)
 npx oxlint src         # lint
 ```
 
