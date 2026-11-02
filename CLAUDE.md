@@ -47,15 +47,17 @@ src/
   features/
     top-nav/               TopNav-Components sheet
     context-bar/           K01–K10 (instrument, chart data dialog, timeframe)
-    canvas/                strategy canvas (static preview until the builder phase)
+    canvas/                the real canvas, built only from kit/ parts: StrategyCanvas (camera, frames, drag), CanvasTree (rows, groups), CanvasBlock (fields + popovers)
+    canvas/kit/            canvas builder components from design/canvas-builder (Storybook: "Canvas builder/…").
+                           All rings come from kit/editorRing.ts — never compute a ring anywhere else.
     bottom-bar/            K11–K12 (chart/signals tabs, update chart, log, limits)
     chart/PriceChart.tsx   Lightweight Charts wrapper (+ entry/exit markers)
     backtest/              SetupBlock-Unified sheet
     copilot/               Copilot panel
     scenarios/             ◐ Scenarios switcher. PROTOTYPE ONLY review helper
-  store/                   Zustand stores: workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups)
+  store/                   Zustand stores: canvas (conditions, selection, undo, camera), workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups)
   mock/                    dummy data: seeded candles, instruments, Copilot starters
-  lib/                     pure logic: signals (EMA 9×21 + limits), describeChartData
+  lib/                     pure logic: indicators, conditions (tree edits, 2-level depth, dissolve), signals (evaluates the tree + limits), describeChartData
 ```
 
 ## Behaviour already decided (keep consistent)
@@ -82,6 +84,7 @@ npm install            # once, and after adding libraries
 npm run dev            # app at http://localhost:5173 (live reload)
 npm run build          # type-check + production build
 npm run storybook      # components at http://localhost:6006
+                       # (also published with every Vercel preview at <preview-url>/storybook/)
 npx oxlint src         # lint
 ```
 
@@ -89,7 +92,7 @@ npx oxlint src         # lint
 - ✅ 0 · Setup, tokens, first page (ST-Main)
 - ✅ 1 · Context bar (K01–K10)
 - ✅ 1.5 · Top nav, bottom bar, backtest setup block (component sheets)
-- ⬜ 2 · Canvas builder by hand: build from `design/canvas-builder/COMPONENTS.md` (atoms, blocks, All of / Any of / None of groups, checkbox selection, menus, drag with dnd-kit). B02–B08 and E01–E09 show the flow; the kit wins where they differ.
+- ✅ 2 · Canvas builder by hand: build from `design/canvas-builder/COMPONENTS.md` (atoms, blocks, All of / Any of / None of groups, checkbox selection, menus, drag with dnd-kit). B02–B08 and E01–E09 show the flow; the kit wins where they differ.
 - ⬜ 3 · Copilot flow (CP-*: understood → question → building → applied; refine; edge cases)
 - ⬜ 4 · Pine Script panel (PN-*: errors fixed in place)
 - ⬜ 5 · Update chart flow polish (U01–U06)

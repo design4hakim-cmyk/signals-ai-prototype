@@ -95,6 +95,29 @@
   --color-warn-tint: #fff7e6;
   --color-warn-dot: #e5a000;
 
+  /* ── Canvas builder kit (design/canvas-builder/COMPONENTS.md, atom-states.ts)
+        Editor layer = blue only: --color-brand + --color-brand-border (#9cc8ee). */
+  --color-menu-current: #eef5fc; /* current row in a menu (with ✓) */
+  --color-brand-pressed-tint: #e6f3fb; /* tertiary pressed, ⋯ open, ⋮⋮ dragging */
+  --color-row-pressed: #e9ebee; /* menu row / ⋯ pressed */
+  --color-border-dashed: #b3b8bf; /* empty atom, drag source */
+  --color-group-edge: #c3c8cf; /* dashed All of / Any of / None of box */
+  --color-group-bg: #fcfcfd;
+  --color-readonly-bg: #fafbfc;
+  --color-disabled-bg: #f7f8fa;
+  --color-disabled-border: #ececef;
+  --color-error: #b42318; /* with an icon and a message, always */
+  --color-error-bg: #fdf4f4;
+  --color-error-pressed: #fbeceb;
+  --color-success: #2f8a4e;
+  --color-success-bg: #eaf6ee;
+  --color-star: #f0b429; /* ★ favourite indicator */
+  /* Copilot provenance ONLY (✦ + violet on things Copilot added). Never hover or focus. */
+  --color-copilot: #6e56cf;
+  --color-copilot-border: #b9a8f7;
+  --color-copilot-bg: #efeaff;
+  --color-copilot-soft: #d6cbfa;
+
   /* ── Misc greys from the component sheets */
   --color-text-disabled: #a1a6ad;
   --color-row-hover: #f4f5f7;
@@ -144,6 +167,9 @@
   --shadow-menu: 0 16px 40px rgba(20, 22, 28, 0.14); /* dropdown menus */
   --shadow-dialog: 0 20px 50px rgba(20, 22, 28, 0.16); /* chart data dialog */
   --shadow-popover: 0 8px 24px rgba(16, 24, 40, 0.12); /* ⋯ menus, trade lists, limit panels */
+  --shadow-surface: 0 12px 32px rgba(20, 22, 28, 0.14); /* canvas popovers, selection bar, toast */
+  --shadow-lift: 0 12px 28px rgba(20, 22, 28, 0.18); /* block or group being dragged */
+  --shadow-rail-add: 0 2px 6px rgba(7, 130, 218, 0.25); /* the + on the rail */
 
   /* ── Layout sizes (fixed parts of the workspace) */
   --spacing-topbar: 56px;
