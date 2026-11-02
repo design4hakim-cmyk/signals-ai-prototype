@@ -19,8 +19,9 @@ Hakim, lead product designer. **Not a developer.**
 Canvas artifact **"Signals AI · All flows"**: https://claude.ai/artifact/6vqCncptxzd5mdqLviriWT
 - Read its **Read me** notes first (in `project/canvas.json` → `notes`: `readme`, `rm0`–`rm4`).
 - Board prefixes: `ST-` strategies & trade · `CP-` Copilot · `PN-` Pine panel · `BT-` backtest · `K` context + bottom bar · `U` update chart · `B`/`E` canvas builder.
-- Component sheets (the spec for shared parts): `TopNav-Components`, `K12-bottom-bar-states`, `SetupBlock-Unified`, `Builder-Atoms`, `Builder-Atoms-2`, `Builder-Behaviour`, `Builder-Behaviour-2`.
+- Component sheets (the spec for shared parts): `TopNav-Components`, `K12-bottom-bar-states`, `SetupBlock-Unified`, `Builder-Atoms`, `Builder-Atoms-2`, `Builder-Behaviour`, `Builder-Behaviour-2`, `ST-Components`, `ST-Behaviour`.
 - **Canvas builder kit: `design/canvas-builder/`.** Read `COMPONENTS.md` there before any canvas builder work. It is the written spec for the `Builder-Atoms` and `Builder-Behaviour` sheets, with reference images and a token mapping. It supersedes the older `B`/`E` boards where they differ (e.g. All of / Any of / None of instead of AND/OR, checkbox selection instead of ⋯ → Select). **Key rule: every canvas element has two layers — its own look (grey / red error / violet Copilot / dashed empty) and a separate Figma-like editor layer of blue rings outside the border (hover, pressed, selected, focus, drop target). Interaction never changes the element's own fill or border. Preview mode hides the editor layer.**
+- **My Strategies panel kit: `design/strategies-panel/`.** Read `COMPONENTS.md` there before any work on the saved-strategies side panel. It supersedes `ST-S03`–`ST-S12` where they differ (no dates, no Draft chip, Live / FT counts, Trade on hover, rename, delete).
 - "Parking" boards are superseded. Ignore them.
 - Boards can be 100–150 KB. Don't read them raw: save the HTML, then run `python3 -I scripts/board-outline.py <file.html>` to get text + key styles. List the unique text first; it contains the designer's annotations.
 
@@ -95,4 +96,4 @@ npx oxlint src         # lint
 - ⬜ 5 · Update chart flow polish (U01–U06)
 - ⬜ 6 · Backtest screens (BT-*) + saved setups as tabs
 - ⬜ 7 · Go live safely (ST-S14–S22: forward test first, then live)
-- ⬜ 8 · My Strategies panel (ST-S03–S12)
+- ⬜ 8 · My Strategies panel: build from `design/strategies-panel/COMPONENTS.md` (ST-S03–S12 show the flow; the kit wins where they differ)
