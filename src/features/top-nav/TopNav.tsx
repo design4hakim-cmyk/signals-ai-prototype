@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronDownIcon, FolderIcon } from '@/components/ui/icons';
 import { Popover } from '@/components/ui/Popover';
 import { resultsCurrent, useBacktest } from '@/store/backtest';
@@ -151,6 +151,12 @@ function PeriodMenu({ locked }: { locked: boolean }) {
   const period = useWorkspace((s) => s.period);
   const setPeriod = useWorkspace((s) => s.setPeriod);
   const [open, setOpen] = useState(false);
+  // "Change period" on an empty backtest result opens this menu
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener('open-period-menu', show);
+    return () => window.removeEventListener('open-period-menu', show);
+  }, []);
   return (
     <Popover
       open={open}

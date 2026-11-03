@@ -133,6 +133,17 @@
   --color-tile-groww: #1c7a5a;
   --color-tile-asianpaint-bg: #fde8ea;
   --color-tile-asianpaint: #b4232f;
+  /* ── Backtest results (design/backtest-results/COMPONENTS.md).
+        Names shared with other kits use the same values. */
+  --color-chart-benchmark: #9aa1ab; /* NIFTY line on the equity curve */
+  /* Year-wise heatmap: three steps by size of the month */
+  --color-heat-profit-1: #e3f4e8;
+  --color-heat-profit-2: #bfe5cb;
+  --color-heat-profit-3: #86cf9f;
+  --color-heat-loss-1: #f8dcdd;
+  --color-heat-loss-2: #f2b9bb;
+  --color-heat-loss-3: #ee9c9e;
+  --color-heat-empty: #f7f8fa; /* month with no trades: "–" */
 
   /* ── Misc greys from the component sheets */
   --color-text-disabled: #a1a6ad;

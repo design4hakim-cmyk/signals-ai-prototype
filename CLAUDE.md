@@ -55,14 +55,14 @@ src/
                            All rings come from kit/editorRing.ts — never compute a ring anywhere else.
     bottom-bar/            K11–K12 (chart/signals tabs, update chart, log, limits)
     chart/PriceChart.tsx   Lightweight Charts wrapper (+ entry/exit markers)
-    backtest/              SetupBlock-Unified sheet
+    backtest/              SetupBlock-Unified sheet; results/ = the full results page (design/backtest-results), grown from ResultsPanel
     copilot/               Copilot panel
     strategies/            My Strategies panel (design/strategies-panel): parts, rows, menus, StrategiesPanel; stories in strategies/stories
     trade/                 the one Trade popup (top nav Trade, panel Trade, ⋯ → Trade…). Placeholder until phase 7
     scenarios/             ◐ Scenarios switcher. PROTOTYPE ONLY review helper
-  store/                   Zustand stores: canvas (conditions, selection, undo, camera), library (saved strategies, panel), workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups)
-  mock/                    dummy data: seeded candles, instruments, Copilot starters
-  lib/                     pure logic: indicators, conditions (tree edits, 2-level depth, dissolve), signals (evaluates the tree + limits), describeChartData
+  store/                   Zustand stores: canvas (conditions, selection, undo, camera), library (saved strategies, panel), workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups), results (how the results page is viewed: VIX filter, sort, Monte Carlo)
+  mock/                    dummy data: seeded candles, instruments, example + saved strategies, Copilot starters
+  lib/                     pure logic: indicators, conditions (tree edits, 2-level depth, dissolve), signals (evaluates the tree + limits), describeChartData, backtestData (results maths from mock-results.json)
 ```
 
 ## Behaviour already decided (keep consistent)
