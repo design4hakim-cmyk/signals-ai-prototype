@@ -3,6 +3,7 @@ import { flatConditions } from '@/lib/conditions';
 import { complexStrategy, demoStrategy, editingStrategy, groupedStrategy, halfBuiltStrategy } from '@/mock/strategies';
 import { SAVED_LIBRARY, useBacktest } from '@/store/backtest';
 import { useCanvas, type EditorPart } from '@/store/canvas';
+import { useLibrary } from '@/store/library';
 import { useStrategy } from '@/store/strategy';
 import { useWorkspace } from '@/store/workspace';
 import type { StrategyTree } from '@/types/strategy';
@@ -19,7 +20,9 @@ const resetAll = () => {
   useWorkspace.setState(useWorkspace.getInitialState(), true);
   useBacktest.setState(useBacktest.getInitialState(), true);
   useCanvas.setState(useCanvas.getInitialState(), true);
+  useLibrary.setState(useLibrary.getInitialState(), true);
 };
+const L = () => useLibrary.getState();
 const S = () => useStrategy.getState();
 const W = () => useWorkspace.getState();
 const B = () => useBacktest.getState();
@@ -78,6 +81,23 @@ const GROUPS: { title: string; items: [string, () => void][] }[] = [
       ['18 · Half built: red field, update blocked', () => { withStrategy(); C().addCondition('entry'); const id = nth('entry', 3); C().setOperand(id, 'left', { type: 'indicator', id: 'price', params: { source: 'Close' } }); C().setRelation(id, 'Cross Above'); C().closeEditor(); }],
       ['19 · Big strategy, zoomed out to 50%', () => { withStrategy(complexStrategy()); C().setView({ x: 0, y: 0, zoom: 0.5 }); }],
       ['20 · Entry section selected (drag title / arrows)', () => { withStrategy(); C().selectFrame('entry'); }],
+    ],
+  },
+  {
+    title: 'My Strategies panel',
+    items: [
+      ['P1 · Peek (hover the folder icon)', () => { resetAll(); L().setMode('peek'); }],
+      ['P2 · Pinned beside the builder', () => { resetAll(); L().setMode('pinned'); }],
+      ['P3 · Pinned, Bull Call Spread open', () => { resetAll(); L().setMode('pinned'); L().openStrategy('s-bcs'); }],
+      ['P4 · Open, with unsaved changes', () => { resetAll(); L().setMode('pinned'); L().openStrategy('s-bcs'); S().edit('changed RSI (14) > 50 → 60 in Entry'); }],
+      ['P5 · Search “rsi”', () => { resetAll(); L().setMode('pinned'); L().setQuery('rsi'); }],
+      ['P6 · No results', () => { resetAll(); L().setMode('pinned'); L().setQuery('xyz'); }],
+      ['P7 · Empty', () => { resetAll(); L().set({ strategies: [] }); L().setMode('pinned'); }],
+      ['P8 · Renaming (try Iron Condor)', () => { resetAll(); L().setMode('pinned'); L().set({ renamingId: 's-bps', loading: false }); }],
+      ['P9 · Delete confirm', () => { resetAll(); L().setMode('pinned'); L().set({ confirmDeleteId: 's-bps', loading: false }); }],
+      ['P10 · Running: delete blocked', () => { resetAll(); L().setMode('pinned'); L().set({ menuId: 's-bcs', loading: false }); }],
+      ['P11 · Trade popup', () => { resetAll(); L().setMode('pinned'); L().set({ loading: false, tradeFor: { id: 's-bps', name: 'Bear Put Spread' } }); }],
+      ['P12 · GROWW: delete its last strategy', () => { resetAll(); L().setMode('pinned'); L().set({ expanded: ['GROWW'], confirmDeleteId: 's-groww-orb', loading: false }); }],
     ],
   },
   {

@@ -57,8 +57,10 @@ src/
     chart/PriceChart.tsx   Lightweight Charts wrapper (+ entry/exit markers)
     backtest/              SetupBlock-Unified sheet
     copilot/               Copilot panel
+    strategies/            My Strategies panel (design/strategies-panel): parts, rows, menus, StrategiesPanel; stories in strategies/stories
+    trade/                 the one Trade popup (top nav Trade, panel Trade, ⋯ → Trade…). Placeholder until phase 7
     scenarios/             ◐ Scenarios switcher. PROTOTYPE ONLY review helper
-  store/                   Zustand stores: canvas (conditions, selection, undo, camera), workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups)
+  store/                   Zustand stores: canvas (conditions, selection, undo, camera), library (saved strategies, panel), workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups)
   mock/                    dummy data: seeded candles, instruments, Copilot starters
   lib/                     pure logic: indicators, conditions (tree edits, 2-level depth, dissolve), signals (evaluates the tree + limits), describeChartData
 ```
@@ -101,4 +103,4 @@ npx oxlint src         # lint
 - ⬜ 5 · Update chart flow polish (U01–U06)
 - ⬜ 6 · Backtest screens (BT-*) + saved setups as tabs. Results area: build from `design/backtest-results/COMPONENTS.md`.
 - ⬜ 7 · Go live safely (ST-S14–S22: forward test first, then live)
-- ⬜ 8 · My Strategies panel: build from `design/strategies-panel/COMPONENTS.md` (ST-S03–S12 show the flow; the kit wins where they differ)
+- ✅ 8 · My Strategies panel: build from `design/strategies-panel/COMPONENTS.md` (ST-S03–S12 show the flow; the kit wins where they differ)
