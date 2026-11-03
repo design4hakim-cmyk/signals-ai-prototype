@@ -1,27 +1,45 @@
 import { useState } from 'react';
+import { flatConditions } from '@/lib/conditions';
+import { complexStrategy, demoStrategy, editingStrategy, groupedStrategy, halfBuiltStrategy } from '@/mock/strategies';
 import { SAVED_LIBRARY, useBacktest } from '@/store/backtest';
+import { useCanvas, type EditorPart } from '@/store/canvas';
 import { useStrategy } from '@/store/strategy';
 import { useWorkspace } from '@/store/workspace';
+import type { StrategyTree } from '@/types/strategy';
 
 /*
   PROTOTYPE ONLY — a review helper, not part of the product.
-  The canvas builder isn't coded yet, so this jumps the app into the
-  states from the component sheets (Top nav A–K, Bottom bar 1–12, Setup block 1–9).
+  Jumps the app into states from the boards and component sheets
+  (Canvas builder B/E/U, Top nav A–K, Bottom bar 1–12, Setup block 1–9),
+  so reviewers don't have to click their way there.
 */
 
 const resetAll = () => {
   useStrategy.setState(useStrategy.getInitialState(), true);
   useWorkspace.setState(useWorkspace.getInitialState(), true);
   useBacktest.setState(useBacktest.getInitialState(), true);
+  useCanvas.setState(useCanvas.getInitialState(), true);
 };
 const S = () => useStrategy.getState();
 const W = () => useWorkspace.getState();
 const B = () => useBacktest.getState();
+const C = () => useCanvas.getState();
+
+/** Start fresh with these conditions already on the canvas, chart drawn from them. */
+const withStrategy = (t: StrategyTree = demoStrategy()) => {
+  resetAll();
+  C().load(t);
+};
+
+/** Find a condition by reading order on a side (1 = first), for opening menus on it. */
+const nth = (side: 'entry' | 'exit', n: number) => flatConditions(C()[side])[n - 1].id;
+const openOn = (id: string, part: EditorPart) => C().openEditor(id, part);
+const EMA9 = { type: 'indicator' as const, id: 'ema' as const, params: { length: 9, source: 'Close' as const, offset: 0 } };
 
 /** A saved strategy with an entry, whose 3 setups are backtested and current. */
 const savedWithResults = () => {
-  resetAll();
-  S().set({ entry: 'complete', name: 'NIFTY Momentum Breakout', saved: true });
+  withStrategy();
+  S().set({ name: 'NIFTY Momentum Breakout', saved: true });
   B().addSaved(SAVED_LIBRARY.slice(0, 3).map((s) => s.id));
   B().seedResults();
 };
@@ -38,13 +56,38 @@ const LIVE = [
 
 const GROUPS: { title: string; items: [string, () => void][] }[] = [
   {
+    title: 'Canvas builder · by hand (kit)',
+    items: [
+      ['1 · Empty: + Add Entry Condition', resetAll],
+      ['2 · New block, picking indicator', () => { resetAll(); C().addCondition('entry'); }],
+      ['3 · Picking the relation', () => { resetAll(); C().addCondition('entry'); C().setOperand(nth('entry', 1), 'left', EMA9); }],
+      ['4 · Indicator or value', () => { resetAll(); C().addCondition('entry'); const id = nth('entry', 1); C().setOperand(id, 'left', EMA9); C().setRelation(id, 'Cross Above'); }],
+      ['5 · Settings open (apply as you type)', () => { withStrategy(); openOn(nth('entry', 1), 'leftSettings'); }],
+      ['6 · Arithmetic open', () => { withStrategy(); openOn(nth('entry', 1), 'rightMath'); }],
+      ['7 · Two conditions, root logic menu', () => { withStrategy(); openOn(C().entry.id, 'logic'); }],
+      ['8 · Many conditions: All of / Any of / None of', () => withStrategy(complexStrategy())],
+      ['9 · Block ⋯ menu', () => { withStrategy(editingStrategy()); openOn(nth('entry', 2), 'more'); }],
+      ['10 · Deleted, with Undo', () => { withStrategy(editingStrategy()); C().remove([nth('entry', 2)]); }],
+      ['11 · One ticked: siblings can join, rest dims', () => { withStrategy(groupedStrategy()); C().toggleSelect(nth('entry', 3)); }],
+      ['12 · Two ticked: group as…', () => { withStrategy(editingStrategy()); C().toggleSelect(nth('entry', 3)); C().toggleSelect(nth('entry', 4)); }],
+      ['13 · Grouped, with Undo', () => { withStrategy(editingStrategy()); C().group([nth('entry', 3), nth('entry', 4)], 'OR'); }],
+      ['14 · Group ⋯ menu', () => { withStrategy(groupedStrategy()); openOn(C().entry.children[2].id, 'more'); }],
+      ['15 · Ready to drag (use ⋮⋮)', () => withStrategy(groupedStrategy())],
+      ['16 · Copilot block (✦ until you edit it)', () => { const t = demoStrategy(); const c = t.entry.children[1]; if (c.kind === 'cond') c.copilot = true; withStrategy(t); }],
+      ['17 · Editing pauses the chart (changed dots)', () => { withStrategy(); C().setRelation(nth('entry', 2), 'Greater Than or Equal'); C().setMath(nth('entry', 1), 'right', { op: '×', value: 1.01 }); }],
+      ['18 · Half built: red field, update blocked', () => { withStrategy(); C().addCondition('entry'); const id = nth('entry', 3); C().setOperand(id, 'left', { type: 'indicator', id: 'price', params: { source: 'Close' } }); C().setRelation(id, 'Cross Above'); C().closeEditor(); }],
+      ['19 · Big strategy, zoomed out to 50%', () => { withStrategy(complexStrategy()); C().setView({ x: 0, y: 0, zoom: 0.5 }); }],
+      ['20 · Entry section selected (drag title / arrows)', () => { withStrategy(); C().selectFrame('entry'); }],
+    ],
+  },
+  {
     title: 'Top nav · through the flow',
     items: [
       ['A · New, empty', resetAll],
-      ['B · Building, half-done', () => { resetAll(); S().set({ entry: 'partial' }); }],
-      ['C · Ready, not saved', () => { resetAll(); S().set({ entry: 'complete' }); }],
-      ['E · Saved', () => { resetAll(); S().set({ entry: 'complete', name: 'NIFTY Momentum Breakout', saved: true }); }],
-      ['F · Saved, then edited', () => { resetAll(); S().set({ entry: 'complete', name: 'NIFTY Momentum Breakout', saved: true }); S().edit('changed RSI (14) > 50 → 60 in Entry'); }],
+      ['B · Building, half-done', () => withStrategy(halfBuiltStrategy())],
+      ['C · Ready, not saved', () => withStrategy()],
+      ['E · Saved', () => { withStrategy(); S().set({ name: 'NIFTY Momentum Breakout', saved: true }); }],
+      ['F · Saved, then edited', () => { withStrategy(); S().set({ name: 'NIFTY Momentum Breakout', saved: true }); S().edit('changed RSI (14) > 50 → 60 in Entry'); }],
       ['H · Backtest results current', savedWithResults],
       ['I · Edited after backtest', () => { savedWithResults(); S().edit('added Volume > SMA (20) to Entry'); }],
       ['J · One forward test', () => { savedWithResults(); S().set({ forwardTests: FWD.slice(0, 1) }); }],
@@ -54,18 +97,18 @@ const GROUPS: { title: string; items: [string, () => void][] }[] = [
   {
     title: 'Bottom bar',
     items: [
-      ['1 · Default, counts current', () => { resetAll(); S().set({ entry: 'complete' }); }],
-      ['3 · Edited, chart paused', () => { resetAll(); S().set({ entry: 'complete' }); W().strategyEdited(2); }],
-      ['4 · Edit not finished', () => { resetAll(); S().set({ entry: 'partial' }); W().strategyEdited(1); }],
-      ['7 · Couldn\'t update (press Update chart)', () => { resetAll(); S().set({ entry: 'complete' }); W().strategyEdited(1); W().set({ failNextUpdate: true }); }],
-      ['8 · No signals', () => { resetAll(); S().set({ entry: 'complete', noSignals: true }); }],
-      ['9 · Signal log open', () => { resetAll(); S().set({ entry: 'complete' }); W().setBottomTab('signals'); }],
+      ['1 · Default, counts current', () => withStrategy()],
+      ['3 · Edited, chart paused', () => { withStrategy(); W().strategyEdited(2); }],
+      ['4 · Edit not finished', () => { withStrategy(halfBuiltStrategy()); W().strategyEdited(1); }],
+      ['7 · Couldn\'t update (press Update chart)', () => { withStrategy(); W().strategyEdited(1); W().set({ failNextUpdate: true }); }],
+      ['8 · No signals', () => { withStrategy(); S().set({ noSignals: true }); }],
+      ['9 · Signal log open', () => { withStrategy(); W().setBottomTab('signals'); }],
     ],
   },
   {
     title: 'Setup block (Backtest tab)',
     items: [
-      ['1 · First time, blank', () => { resetAll(); S().set({ entry: 'complete', mode: 'backtest' }); }],
+      ['1 · First time, blank', () => { withStrategy(); S().set({ mode: 'backtest' }); }],
       ['3 · Saved setups, all current', () => { savedWithResults(); S().set({ mode: 'backtest' }); }],
       ['4 · Edited this setup', () => {
         savedWithResults(); S().set({ mode: 'backtest' });
