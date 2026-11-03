@@ -76,14 +76,15 @@ export const FollowUpChip = ({ children, onClick }: { children: ReactNode; onCli
 export function StatusIcon({ kind }: { kind: 'done' | 'working' | 'needs' | 'failed' | 'stopped' }) {
   if (kind === 'working') return <span aria-label="Working" className="size-4 shrink-0 animate-spin rounded-full border-2 border-brand border-t-transparent" />;
   if (kind === 'stopped') return <span aria-label="Stopped" className="flex size-4 shrink-0 items-center justify-center rounded-full bg-surface-selected"><span className="size-1.5 rounded-[1px] bg-text-tertiary" /></span>;
+  // full class names, written out: Tailwind only generates classes it can find as text
   const map = {
-    done: { bg: 'bg-success', label: 'Done', path: 'M7 12.5l3 3 7-7' },
-    failed: { bg: 'bg-error', label: 'Failed', path: 'M12 7v6M12 16.5v.5' },
-    needs: { bg: 'bg-warn-dot', label: 'Needs you', path: 'M12 8v5M12 16.5v.5' },
+    done: { fill: 'fill-success', label: 'Done', path: 'M7 12.5l3 3 7-7' },
+    failed: { fill: 'fill-error', label: 'Failed', path: 'M12 7v6M12 16.5v.5' },
+    needs: { fill: 'fill-warn-dot', label: 'Needs you', path: 'M12 9v4.5M12 17.5v.5' },
   }[kind];
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" aria-label={map.label} className="shrink-0">
-      {kind === 'needs' ? <path d="M12 2.5L23 21.5H1z" className="fill-warn-dot" /> : <circle cx="12" cy="12" r="11" className={map.bg.replace('bg-', 'fill-')} />}
+      {kind === 'needs' ? <path d="M12 2.5L23 21.5H1z" className={map.fill} /> : <circle cx="12" cy="12" r="11" className={map.fill} />}
       <path d={map.path} stroke="white" strokeWidth="2.6" strokeLinecap="round" fill="none" />
     </svg>
   );
