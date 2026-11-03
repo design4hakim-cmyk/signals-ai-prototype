@@ -199,7 +199,7 @@ export function StrategyCanvas() {
 
       {/* Bottom of the canvas: toast and selection bar — white, same surface as popovers */}
       <div className="pointer-events-none absolute bottom-5 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2 [&>*]:pointer-events-auto">
-        {toast && !activeId && <CanvasToast text={toast.text} onUndo={toast.undo ? () => useCanvas.getState().undo() : undefined} />}
+        {toast && !activeId && <CanvasToast text={toast.text} icon={toast.icon} onUndo={toast.undo ? () => useCanvas.getState().undo() : undefined} />}
         {selected.length > 0 && !activeId && <CanvasSelectionBar ids={selected} />}
       </div>
 

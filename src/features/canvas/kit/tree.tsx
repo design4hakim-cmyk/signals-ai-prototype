@@ -226,11 +226,18 @@ export function SelectionBar({ count, onGroup, onDuplicate, onDelete, onClear, g
   );
 }
 
-export function CanvasToast({ text, onUndo }: { text: string; onUndo?: () => void }) {
+/** Toast: [✦ for Copilot · </> after your own Run] + text + Undo as a secondary button (FIXES.md 7). */
+export function CanvasToast({ text, onUndo, icon }: { text: string; onUndo?: () => void; icon?: 'ai' | 'code' }) {
   return (
-    <div role="status" className="inline-flex min-h-[42px] items-center gap-3 rounded-block border border-border-control bg-surface py-1.5 pr-1.5 pl-3.5 text-body shadow-surface">
+    <div role="status" className="inline-flex items-center gap-3 rounded-block border border-border-control bg-surface py-1.5 pr-1.5 pl-3 text-body whitespace-nowrap shadow-surface">
+      {icon === 'ai' && (
+        <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" className="-mr-1 shrink-0 fill-ai">
+          <path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z" />
+        </svg>
+      )}
+      {icon === 'code' && <span aria-hidden="true" className="-mr-1 font-mono text-[11px] font-semibold text-text-secondary">&lt;/&gt;</span>}
       {text}
-      {onUndo !== undefined && <KitButton variant="tertiary" onClick={onUndo}>Undo</KitButton>}
+      {onUndo !== undefined && <KitButton variant="secondary" className="!h-7 !px-3 font-medium" onClick={onUndo}>Undo</KitButton>}
     </div>
   );
 }

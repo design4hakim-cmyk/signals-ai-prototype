@@ -167,7 +167,7 @@ export const useCopilot = create<CopilotState>((set, get) => {
         const placeholder = C().copilotPreview?.placeholder ?? null;
         C().copilotAdd(side, conds.slice(from), `Copilot added ${conds.length - from} ${side} condition${conds.length - from > 1 ? 's' : ''}`);
         C().set({ copilotPreview: placeholder ? { side: placeholder, rows: [], placeholder } : null });
-        C().showToast(`Added ${conds.length - from} ${side} condition${conds.length - from > 1 ? 's' : ''}`);
+        C().showToast(`Added ${conds.length - from} ${side} condition${conds.length - from > 1 ? 's' : ''}`, true, 'ai');
         done();
         return;
       }
@@ -214,7 +214,7 @@ export const useCopilot = create<CopilotState>((set, get) => {
         markPine('exit');
         C().copilotAdd('exit', [exit], 'Copilot added the exit');
         C().set({ copilotPreview: null });
-        C().showToast('Added the exit');
+        C().showToast('Added the exit', true, 'ai');
         patch(id, { phase: 'ready', placed: c.entry.length, counts: countsNow() } as Partial<Card>);
       });
     } else {
@@ -273,7 +273,7 @@ export const useCopilot = create<CopilotState>((set, get) => {
               C().set({ copilotPreview: null });
               patch(open.id, { question: null } as Partial<Card>);
             }
-            C().showToast('Added 1 condition to Exit');
+            C().showToast('Added 1 condition to Exit', true, 'ai');
             card({ kind: 'refineAdd', id, side: 'exit', added: exit, before, after: countsNow(), mark });
           });
           return;
@@ -287,7 +287,7 @@ export const useCopilot = create<CopilotState>((set, get) => {
             const mark = C().history.length;
             markPine('volume filter');
             C().copilotAdd('entry', [added], 'Copilot added a volume filter to Entry');
-            C().showToast('Added 1 condition to Entry');
+            C().showToast('Added 1 condition to Entry', true, 'ai');
             card({ kind: 'refineAdd', id, side: 'entry', added: findCond((c) => c.left?.type === 'indicator' && c.left.id === 'volume') ?? added, before, after: countsNow(), mark });
           });
           return;
@@ -398,7 +398,7 @@ export const useCopilot = create<CopilotState>((set, get) => {
       markPine('custom logic');
       C().copilotAdd('entry', partlyFitsEntry(line), 'Copilot added a custom logic entry', 1);
       C().copilotAdd('exit', [rsiExit()], 'Copilot added the exit', 0);
-      C().showToast('Added to canvas · 1 custom block');
+      C().showToast('Added to canvas · 1 custom block', true, 'ai');
       // the custom block runs on code, so the counts are the board's
       patch(id, { phase: 'built', counts: { entries: 11, exits: 11 }, mark } as Partial<Card>);
     },
@@ -408,7 +408,7 @@ export const useCopilot = create<CopilotState>((set, get) => {
       markPine('simplified entry');
       C().copilotAdd('entry', simplifiedEntry(), 'Copilot added a simplified entry', 1);
       C().copilotAdd('exit', [rsiExit()], 'Copilot added the exit', 0);
-      C().showToast('Added 2 entry conditions');
+      C().showToast('Added 2 entry conditions', true, 'ai');
       patch(id, { phase: 'simplified', counts: countsNow(), mark } as Partial<Card>);
     },
 

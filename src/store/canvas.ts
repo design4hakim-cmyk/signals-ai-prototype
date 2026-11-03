@@ -81,6 +81,8 @@ export interface PendingChange {
 interface CanvasToast {
   text: string;
   undo: boolean;
+  /** ✦ when Copilot made the change, </> after your own Run */
+  icon?: 'ai' | 'code';
 }
 
 interface CanvasState extends StrategyTree {
@@ -132,7 +134,7 @@ interface CanvasState extends StrategyTree {
   copilotAdd: (side: Side, nodes: StrategyNode[], description: string, changes?: number) => void;
   /** Copilot's reviewed change, applied */
   copilotCommit: (t: StrategyTree, description: string, toast?: string) => void;
-  showToast: (text: string, undo?: boolean) => void;
+  showToast: (text: string, undo?: boolean, icon?: 'ai' | 'code') => void;
 }
 
 const treeOf = (s: StrategyTree): StrategyTree => ({ entry: s.entry, exit: s.exit });
@@ -160,9 +162,9 @@ export const useCanvas = create<CanvasState>((set, get) => {
     useStrategy.getState().edit(description, changes);
   };
 
-  const showToast = (text: string, undo = true) => {
+  const showToast = (text: string, undo = true, icon?: 'ai' | 'code') => {
     clearTimeout(toastTimer);
-    set({ toast: { text, undo } });
+    set({ toast: { text, undo, icon } });
     toastTimer = setTimeout(() => set({ toast: null }), 8000); // Undo stays 8 seconds
   };
 
@@ -386,7 +388,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
     },
     copilotCommit: (next, description, toast) => {
       commit(next, description, { pending: null });
-      if (toast) showToast(toast);
+      if (toast) showToast(toast, true, 'ai');
     },
     showToast,
   };

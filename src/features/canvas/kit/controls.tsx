@@ -192,6 +192,7 @@ export function KitButton({
   loading = false,
   disabled = false,
   children,
+  className = '',
   ...rest
 }: { variant?: KitButtonVariant; force?: Force; loading?: boolean; children: ReactNode } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'>) {
   const { state, props } = useButtonState(force, disabled || loading);
@@ -205,7 +206,7 @@ export function KitButton({
       {...props}
       {...rest}
       style={{ boxShadow: ringFor(!!state.focused) }}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-control text-body whitespace-nowrap outline-none transition-colors disabled:cursor-not-allowed ${v.base} ${look}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-control text-body whitespace-nowrap outline-none transition-colors disabled:cursor-not-allowed ${v.base} ${look} ${className}`}
     >
       {loading && <span className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />}
       {children}
