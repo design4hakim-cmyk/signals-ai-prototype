@@ -4,6 +4,7 @@ import { Popover } from '@/components/ui/Popover';
 import { describeCondition, isComplete } from '@/lib/conditions';
 import { INDICATORS, fmtNum, indicatorDef, inputFields, mathLabel, operandLabel } from '@/lib/indicators';
 import { useCanvas, type EditorPart } from '@/store/canvas';
+import { useCopilot } from '@/store/copilot';
 import type { Condition, IndicatorParams, Operand } from '@/types/strategy';
 import { FieldAtom, MathChip } from './kit/atoms';
 import { ConditionBlock, type Joinable } from './kit/ConditionBlock';
@@ -23,6 +24,45 @@ import { ArithmeticMenu, BlockMenu, IndicatorPicker, IndicatorSettings, Relation
 const OPTIONS = INDICATORS.map((d) => ({ id: d.id, name: d.name, short: d.short, category: d.category, fav: d.id === 'ema' || d.id === 'rsi' }));
 
 export function CanvasBlock({ cond, joinable, changed }: { cond: Condition; joinable: Joinable; changed: boolean }) {
+  const set = useCanvas((s) => s.set);
+  return (
+    // hovering a block rings its row in the Copilot card, and the other way round
+    <div className="contents" onMouseEnter={() => set({ linkedHover: cond.id })} onMouseLeave={() => set({ linkedHover: null })}>
+      {cond.custom ? <CustomBlock cond={cond} /> : <Block cond={cond} joinable={joinable} changed={changed} />}
+    </div>
+  );
+}
+
+/** "At least once in the last N candles" can't be drawn: one block that runs on code (design/copilot · Canvas states). */
+function CustomBlock({ cond }: { cond: Condition }) {
+  const linked = useCanvas((s) => s.linkedHover === cond.id);
+  const { remove } = useCanvas.getState();
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: cond.id });
+  return (
+    <ConditionBlock
+      nodeId={cond.id}
+      blockRef={setNodeRef}
+      label={cond.custom!.text}
+      look={isDragging ? 'dragSource' : cond.copilot ? 'copilot' : 'normal'}
+      linked={linked}
+      moreSlot={<MoreButton label="Delete custom logic" onClick={() => remove([cond.id])} />}
+      handleSlot={<span {...attributes} {...listeners}><DragHandle dragging={isDragging} /></span>}
+    >
+      <span aria-hidden="true" className="flex size-7 items-center justify-center rounded-[6px] bg-surface-selected font-mono text-label font-semibold text-text-secondary">&lt;/&gt;</span>
+      <span className="px-1 text-chip">{cond.custom!.text}</span>
+      <button type="button" onClick={() => useCopilot.getState().openLine(cond.custom!.line)} className="rounded-chip px-1.5 text-label font-medium text-brand hover:bg-brand-tint">
+        Open line {cond.custom!.line}
+      </button>
+    </ConditionBlock>
+  );
+}
+
+function Block({ cond: real, joinable, changed }: { cond: Condition; joinable: Joinable; changed: boolean }) {
+  // a change Copilot is waiting to apply shows on the block, the block itself unchanged until Apply
+  const proposed = useCanvas((s) => s.pending?.changes[real.id]);
+  const removing = useCanvas((s) => !!s.pending?.removals.includes(real.id));
+  const linked = useCanvas((s) => s.linkedHover === real.id);
+  const cond = proposed ?? real;
   const editor = useCanvas((s) => s.editor);
   const selected = useCanvas((s) => s.selected.includes(cond.id));
   const { toggleSelect, openEditor, closeEditor, duplicate, addBelow, copyAsText, remove } = useCanvas.getState();
@@ -37,7 +77,9 @@ export function CanvasBlock({ cond, joinable, changed }: { cond: Condition; join
       nodeId={cond.id}
       blockRef={setNodeRef}
       label={describeCondition(cond)}
-      look={isDragging ? 'dragSource' : halfBuilt ? 'error' : cond.copilot ? 'copilot' : 'normal'}
+      look={isDragging ? 'dragSource' : removing ? 'removing' : halfBuilt ? 'error' : cond.copilot ? 'copilot' : 'normal'}
+      linked={linked}
+      pendingChange={!!proposed}
       error={halfBuilt ? 'Finish this condition to update the chart' : undefined}
       selected={selected}
       changed={changed}
@@ -59,6 +101,7 @@ export function CanvasBlock({ cond, joinable, changed }: { cond: Condition; join
     >
       <OperandField cond={cond} which="left" mine={mine} editing={editing} />
       <RelationField cond={cond} open={mine === 'relation'} editing={editing} />
+      {proposed && real.right?.type === 'number' && <s className="text-label text-text-subtle">{real.right.value}</s>}
       <OperandField cond={cond} which="right" mine={mine} editing={editing} />
     </ConditionBlock>
   );

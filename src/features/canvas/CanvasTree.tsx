@@ -131,7 +131,29 @@ export function DragCopy({ id }: { id: string }) {
   return <StaticNode node={node} dragging />;
 }
 
-function StaticNode({ node, dragging = false }: { node: StrategyNode; dragging?: boolean }) {
+/* ── Copilot placing blocks (design/copilot · Canvas states) ───── */
+
+/** Rows Copilot has queued (skeleton), is placing (ghost) or is waiting on (placeholder). */
+export function CopilotPreviewRows({ side }: { side: Side }) {
+  const preview = useCanvas((s) => (s.copilotPreview?.side === side || s.copilotPreview?.placeholder === side ? s.copilotPreview : null));
+  if (!preview) return [];
+  const rows = preview.side === side
+    ? preview.rows.map((r, i) =>
+        r.kind === 'skeleton'
+          ? <div key={`sk${i}`} aria-label="Queued by Copilot" className="h-10 w-[300px] animate-pulse rounded-block border border-dashed border-ai-border bg-ai-tint" />
+          : <div key={`gh${i}`}><StaticNode node={r.cond} ghost /></div>,
+      )
+    : [];
+  if (preview.placeholder === side && preview.side !== side)
+    rows.push(
+      <div key="wait" className="flex h-10 w-[300px] items-center rounded-block border border-dashed border-ai-border px-3 text-label text-ai-text">
+        Waiting for your answer in Copilot
+      </div>,
+    );
+  return rows;
+}
+
+function StaticNode({ node, dragging = false, ghost = false }: { node: StrategyNode; dragging?: boolean; ghost?: boolean }) {
   if (node.kind === 'group')
     return (
       <LogicGroup word={WORD[node.logic]} dragging={dragging}>
@@ -149,7 +171,7 @@ function StaticNode({ node, dragging = false }: { node: StrategyNode; dragging?:
     );
   };
   return (
-    <ConditionBlock dragging={dragging} look={node.copilot ? 'copilot' : 'normal'} label="Condition">
+    <ConditionBlock dragging={dragging} look={ghost ? 'ghost' : node.copilot ? 'copilot' : 'normal'} label="Condition">
       {side(node.left, 'Indicator')}
       <FieldAtom kind="relation" semantic={node.relation ? 'normal' : 'empty'} label={node.relation ?? 'Relation'} />
       {side(node.right, 'Indicator or value')}

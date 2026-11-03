@@ -14,7 +14,7 @@ import { useEditorState } from './useEditorState';
   Editing a field: only that field gets the selected ring — the block doesn't change.
 */
 
-export type BlockLook = 'normal' | 'error' | 'copilot' | 'disabled' | 'dragSource';
+export type BlockLook = 'normal' | 'error' | 'copilot' | 'disabled' | 'dragSource' | 'ghost' | 'removing';
 
 /** While some blocks are ticked: can this one join? (behaviour §2 "Select and group") */
 export type Joinable = 'none' | 'canJoin' | 'cantJoin';
@@ -25,6 +25,9 @@ const OWN: Record<BlockLook, string> = {
   copilot: 'bg-copilot-bg border-copilot-border',
   disabled: 'bg-disabled-bg border-disabled-border',
   dragSource: 'bg-disabled-bg border-dashed border-border-dashed opacity-50',
+  // design/copilot · Canvas states
+  ghost: 'bg-surface border-dashed border-ai-border opacity-85',
+  removing: 'bg-sell-tint border-dashed border-sell text-sell-text opacity-80',
 };
 
 export interface ConditionBlockProps {
@@ -48,6 +51,10 @@ export interface ConditionBlockProps {
   keepControls?: boolean;
   nodeId?: string;
   blockRef?: Ref<HTMLDivElement>;
+  /** Copilot: its card row is hovered, so show this block's hover ring */
+  linked?: boolean;
+  /** Copilot wants to change this block (dashed blue outline until Apply) */
+  pendingChange?: boolean;
 }
 
 export function ConditionBlock({
@@ -66,10 +73,12 @@ export function ConditionBlock({
   keepControls = false,
   nodeId,
   blockRef,
+  linked = false,
+  pendingChange = false,
 }: ConditionBlockProps) {
   const disabled = look === 'disabled';
-  const source = look === 'dragSource';
-  const { state, mode, props } = useEditorState({ ...force, selected: selected || dragging || force?.selected, lifted: dragging }, disabled || source);
+  const source = look === 'dragSource' || look === 'ghost';
+  const { state, mode, props } = useEditorState({ ...force, inter: force?.inter ?? (linked ? 'hover' : undefined), selected: selected || dragging || force?.selected, lifted: dragging }, disabled || source);
   const editor = mode === 'editor' && !disabled && !source;
   const engaged = state.inter !== 'default' || !!state.selected;
   // Controls show while the pointer is anywhere in the block (CSS group-hover), even over a field;
@@ -90,12 +99,12 @@ export function ConditionBlock({
         aria-disabled={disabled || undefined}
         tabIndex={disabled ? -1 : 0}
         {...props}
-        style={{ boxShadow: editorRing(state, mode, disabled || source), transform: dragging ? DRAG_TILT : undefined }}
+        style={{ boxShadow: editorRing(state, mode, disabled || source), transform: dragging ? DRAG_TILT : undefined, ...(pendingChange ? { outline: '1.5px dashed var(--color-brand)', outlineOffset: 3 } : {}) }}
         className={`group/block relative inline-flex w-max max-w-[640px] flex-wrap items-center gap-1.5 rounded-block border p-1.5 outline-none transition-shadow duration-100 ${OWN[look]} ${
           disabled ? 'cursor-not-allowed text-text-disabled' : ''
         }`}
       >
-        {look === 'copilot' && (
+        {(look === 'copilot' || look === 'ghost') && (
           <span className="absolute -top-2 -left-2">
             <CopilotBadge />
           </span>
@@ -119,6 +128,7 @@ export function ConditionBlock({
         )}
       </div>
       {error && <Message tone="error">{error}</Message>}
+      {look === 'removing' && <span className="text-[11px] font-semibold text-sell-text">Will be removed</span>}
     </div>
   );
 }

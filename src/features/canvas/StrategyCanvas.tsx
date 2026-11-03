@@ -19,7 +19,8 @@ import { Popover } from '@/components/ui/Popover';
 import { findNode, findParent, fitsIn, flatConditions, heightOf, isInside, levelOf, MAX_DEPTH, TOO_DEEP } from '@/lib/conditions';
 import { useCanvas } from '@/store/canvas';
 import type { Condition, Group, Side, StrategyTree } from '@/types/strategy';
-import { DragCopy, TreeRow } from './CanvasTree';
+import { useCopilot } from '@/store/copilot';
+import { CopilotPreviewRows, DragCopy, TreeRow } from './CanvasTree';
 import { useDragState } from './dragState';
 import { FieldAtom } from './kit/atoms';
 import { LogicMenu, TimingMenu } from './kit/menus';
@@ -73,6 +74,7 @@ export function StrategyCanvas() {
   const exit = useCanvas((s) => s.exit);
   const selected = useCanvas((s) => s.selected);
   const toast = useCanvas((s) => s.toast);
+  const codeOnly = useCanvas((s) => s.codeOnly);
   const view = useCanvas((s) => s.view);
   const activeId = useDragState((s) => s.activeId);
   const changed = useChangedIds();
@@ -147,7 +149,7 @@ export function StrategyCanvas() {
   };
 
   const dot = 16 * view.zoom;
-  const isEmpty = !flatConditions(entry).length && !flatConditions(exit).length;
+  const isEmpty = !codeOnly && !flatConditions(entry).length && !flatConditions(exit).length;
 
   return (
     <section aria-label="Strategy canvas" className="relative min-h-0 grow overflow-hidden">
@@ -173,8 +175,9 @@ export function StrategyCanvas() {
               className={`absolute top-0 left-0 origin-top-left ${cam.spaceDown ? 'pointer-events-none' : ''}`}
               style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`, transition: cam.gliding ? 'transform 240ms cubic-bezier(0.2, 0, 0, 1)' : 'none' }}
             >
-              <Frames entry={entry} exit={exit} />
+              {!codeOnly && <Frames entry={entry} exit={exit} />}
             </div>
+            {codeOnly && <CodeOnlyCard />}
             {marquee && <div className="pointer-events-none absolute border border-brand bg-brand-tint" style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h, opacity: 0.7 }} />}
             {isEmpty && !activeId && (
               <p className="pointer-events-none absolute right-6 bottom-16 m-0 max-w-[300px] text-right text-label text-text-muted">
@@ -230,6 +233,24 @@ function CanvasSelectionBar({ ids }: { ids: string[] }) {
 }
 
 /* ── Entry and Exit frames ─────────────────────────────────────── */
+
+/** Copilot built something the canvas can't draw: the strategy runs from Pine Script (design/copilot · Code only). */
+function CodeOnlyCard() {
+  const { setView, checkOnChart } = useCopilot.getState();
+  return (
+    <div className="absolute top-16 left-1/2 flex w-[420px] -translate-x-1/2 flex-col gap-2.5 rounded-card border border-border-control bg-surface p-4 shadow-popover">
+      <span className="flex items-center gap-2">
+        <span className="text-title font-semibold">Runs from Pine Script</span>
+        <span className="inline-flex h-5 items-center rounded-[5px] bg-surface-selected px-1.5 text-[11px] font-semibold text-text-secondary">&lt;/&gt; Code only</span>
+      </span>
+      <p className="m-0 text-body text-text-secondary">This strategy uses memory between candles (lines 5, 8–12), which blocks can’t show. Edit it in code; the chart still shows every trade.</p>
+      <span className="flex gap-2">
+        <button type="button" onClick={() => setView('pine')} className="h-8 rounded-control border border-brand bg-surface px-3 text-label font-medium text-brand hover:bg-brand-tint">Open code</button>
+        <button type="button" onClick={checkOnChart} className="h-8 rounded-control px-3 text-label font-medium text-brand hover:bg-brand-tint">Check on chart</button>
+      </span>
+    </div>
+  );
+}
 
 function Frames({ entry, exit }: { entry: Group; exit: Group }) {
   const frames = useCanvas((s) => s.frames);
@@ -325,6 +346,7 @@ function Frame({ side, root, pos, ref }: { side: Side; root: Group; pos: { x: nu
           }
         >
           {root.children.map((ch, i) => <TreeRow key={ch.id} node={ch} parentId={root.id} index={i} side={side} />)}
+          {CopilotPreviewRows({ side })}
         </SectionShell>
       </div>
     </div>
