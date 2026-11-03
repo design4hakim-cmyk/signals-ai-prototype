@@ -1,68 +1,83 @@
-import type { Condition, Group, Operand, StrategyNode, StrategyTree } from '@/types/strategy';
+import type { Condition, Group, Operand, StrategyNode, StrategyTree, Timing } from '@/types/strategy';
 
 /*
-  Pine Script for the Copilot's code view, written from the canvas conditions.
-  Mock, but readable: one variable per indicator, one line for entry and one for exit.
-  The same tree always gives the same code, so "lines Copilot changed" = lines that are new.
+  Canvas → Pine Script (design/pine-editor · sync model). The code is written straight
+  from the canvas: one variable per indicator, one `longOk = …` line for the entry and one
+  exit `if`. All of → `and`, Any of → `or`, None of → `not (…)`; a group inside a group is
+  wrapped in brackets. The same tree always gives the same code, so lib/pineParse.ts can
+  read it back (parse(pine(tree)) = tree).
 */
 
-const src = (s?: string) => (s ?? 'Close').toLowerCase();
+export interface PineOptions {
+  timing?: Record<'entry' | 'exit', Timing>;
+}
 
-function expr(o: Operand, vars: Map<string, string>): string {
-  if (o.type === 'number') return String(o.value);
+const SRC: Record<string, string> = { Close: 'close', Open: 'open', High: 'high', Low: 'low', Volume: 'volume' };
+const src = (s?: string) => SRC[s ?? 'Close'] ?? 'close';
+const suffix = (s?: string) => (!s || s === 'Close' ? '' : s);
+
+/** Function per moving-average kind. The mock "means" are written as helper calls the parser knows. */
+export const MA_FN: Record<string, string> = {
+  sma: 'ta.sma', ema: 'ta.ema', wma: 'ta.wma', median: 'ta.median', trimmed: 'trimmedMean', geo: 'geoMean', harmonic: 'harmonicMean',
+};
+const MA_NAME: Record<string, string> = { sma: 'sma', ema: 'ema', wma: 'wma', median: 'median', trimmed: 'trimmed', geo: 'geo', harmonic: 'harmonic' };
+
+interface Vars {
+  /** name → definition line (without the aligned "=") */
+  defs: Map<string, string>;
+}
+
+const MATH: Record<string, string> = { '+': '+', '−': '-', '×': '*', '÷': '/' };
+
+function variable(o: Extract<Operand, { type: 'indicator' }>, v: Vars): string {
   const p = o.params;
-  let base: string;
-  switch (o.id) {
-    case 'price': base = src(p.source); break;
-    case 'volume': base = 'volume'; break;
-    case 'vwap': base = vwapVar(vars); break;
-    default: base = variable(o, vars);
+  let name: string;
+  let def: string;
+  if (o.id in MA_FN) {
+    name = p.source === 'Volume' ? `vol${MA_NAME[o.id][0].toUpperCase()}${MA_NAME[o.id].slice(1)}${p.length}` : `${MA_NAME[o.id]}${p.length}${suffix(p.source)}`;
+    def = `${MA_FN[o.id]}(${src(p.source)}, ${p.length})`;
+  } else if (o.id === 'rsi') {
+    name = `rsi${p.length === 14 ? '' : p.length}${suffix(p.source)}`;
+    def = `ta.rsi(${src(p.source)}, ${p.length})`;
+  } else if (o.id === 'stoch') {
+    name = p.k === 14 && p.d === 3 ? 'stochK' : `stochK${p.k}_${p.d}`;
+    def = `ta.sma(ta.stoch(close, high, low, ${p.k}), ${p.d})`;
+  } else if (o.id === 'bb') {
+    const tag = p.length === 20 && p.mult === 2 && (p.source ?? 'Close') === 'Close' ? '' : `${p.length}_${String(p.mult).replace('.', 'p')}${suffix(p.source)}`;
+    const names = ['Middle', 'Upper', 'Lower'].map((b) => `bb${b}${tag}`);
+    name = `bb${p.band}${tag}`;
+    // three outputs from one call: one tuple line
+    const key = `[${names.join(', ')}]`;
+    if (!v.defs.has(key)) v.defs.set(key, `ta.bb(${src(p.source)}, ${p.length}, ${p.mult})`);
+    return name + (p.offset ? `[${p.offset}]` : '');
+  } else {
+    name = o.id;
+    def = `ta.sma(close, 20)`;
   }
-  if (!o.math) return base;
-  const op = { '+': '+', '−': '-', '×': '*', '÷': '/' }[o.math.op];
-  return `${base} ${op} ${o.math.value}`;
+  if (!v.defs.has(name)) v.defs.set(name, def);
+  return name + (p.offset ? `[${p.offset}]` : '');
 }
 
-function vwapVar(vars: Map<string, string>) {
-  if (!vars.has('vwap')) vars.set('vwap', 'vwapLine = ta.vwap(hlc3)');
-  return 'vwapLine';
+function expr(o: Operand, v: Vars): string {
+  let base: string;
+  if (o.type === 'number') base = String(o.value);
+  else if (o.id === 'price') base = src(o.params.source) + (o.params.offset ? `[${o.params.offset}]` : '');
+  else if (o.id === 'volume') base = 'volume';
+  else if (o.id === 'vwap') {
+    if (!v.defs.has('vwapLine')) v.defs.set('vwapLine', 'ta.vwap(hlc3)');
+    base = 'vwapLine';
+  } else base = variable(o, v);
+  return o.math ? `${base} ${MATH[o.math.op]} ${o.math.value}` : base;
 }
 
-function variable(o: Extract<Operand, { type: 'indicator' }>, vars: Map<string, string>): string {
-  const p = o.params;
-  const off = p.offset ? `[${p.offset}]` : '';
-  const key = JSON.stringify([o.id, p]);
-  const name = (() => {
-    switch (o.id) {
-      case 'ema': return `ema${p.length}`;
-      case 'sma': return p.source === 'Volume' ? `volSma${p.length}` : `sma${p.length}`;
-      case 'wma': return `wma${p.length}`;
-      case 'rsi': return 'rsi';
-      case 'stoch': return 'stochK';
-      case 'bb': return `bb${p.band}`;
-      default: return o.id;
-    }
-  })();
-  const def = (() => {
-    switch (o.id) {
-      case 'ema': return `${name} = ta.ema(${src(p.source)}, ${p.length})`;
-      case 'sma': return `${name} = ta.sma(${src(p.source)}, ${p.length})`;
-      case 'wma': return `${name} = ta.wma(${src(p.source)}, ${p.length})`;
-      case 'rsi': return `${name} = ta.rsi(${src(p.source)}, ${p.length})`;
-      case 'stoch': return `${name} = ta.sma(ta.stoch(close, high, low, ${p.k}), ${p.d})`;
-      case 'bb': return `[bbMiddle, bbUpper, bbLower] = ta.bb(${src(p.source)}, ${p.length}, ${p.mult})`;
-      default: return `${name} = ta.sma(${src(p.source)}, ${p.length ?? 20})`;
-    }
-  })();
-  if (![...vars.values()].includes(def)) vars.set(key, def);
-  return name + off;
-}
-
-function cond(c: Condition, vars: Map<string, string>): string {
-  if (c.custom) return `custom${c.custom.line}`;
+function cond(c: Condition, v: Vars): string {
+  if (c.custom) {
+    if (!v.defs.has(c.custom.name)) v.defs.set(c.custom.name, c.custom.expr);
+    return c.custom.name;
+  }
   if (!c.left || !c.right || !c.relation) return 'false';
-  const a = expr(c.left, vars);
-  const b = expr(c.right, vars);
+  const a = expr(c.left, v);
+  const b = expr(c.right, v);
   switch (c.relation) {
     case 'Cross Above': return `ta.crossover(${a}, ${b})`;
     case 'Cross Below': return `ta.crossunder(${a}, ${b})`;
@@ -75,51 +90,53 @@ function cond(c: Condition, vars: Map<string, string>): string {
   }
 }
 
-function group(g: Group, vars: Map<string, string>): string {
-  const parts = g.children.map((ch: StrategyNode) => (ch.kind === 'cond' ? cond(ch, vars) : `(${group(ch, vars)})`));
+function node(n: StrategyNode, v: Vars): string {
+  return n.kind === 'cond' ? cond(n, v) : `(${group(n, v)})`;
+}
+
+function group(g: Group, v: Vars): string {
+  const parts = g.children.map((ch) => node(ch, v));
   if (!parts.length) return 'false';
+  // always `not (…)`: a group inside keeps its own brackets, so `not ((a or b))` reads back as a group
   if (g.logic === 'NONE') return parts.map((p) => `not (${p})`).join(' and ');
   return parts.join(g.logic === 'AND' ? ' and ' : ' or ');
 }
 
+/** Variables first, names aligned like the boards ("ema9  = …", "rsi   = …"). */
+function defLines(v: Vars): string[] {
+  const width = Math.max(0, ...[...v.defs.keys()].filter((k) => !k.startsWith('[')).map((k) => k.length));
+  return [...v.defs].map(([k, d]) => (k.startsWith('[') ? `${k} = ${d}` : `${k.padEnd(width)} = ${d}`));
+}
+
 /** The code, line by line. */
-export function pineFor(t: StrategyTree, name: string, opts: { codeOnly?: boolean } = {}): string[] {
-  if (opts.codeOnly)
-    return [
-      '//@version=5',
-      `strategy("${name}", overlay=true)`,
-      '',
-      'rsi = ta.rsi(close, 14)',
-      'var bool armed = false',
-      '',
-      '// Arm when RSI drops below 40',
-      'if rsi < 40',
-      '    armed := true',
-      'if armed and ta.crossover(rsi, 70)',
-      '    strategy.entry("BUY", strategy.long)',
-      '    armed := false',
-    ];
-  const vars = new Map<string, string>();
-  const entry = group(t.entry, vars);
-  const exit = group(t.exit, vars);
-  const customs = [t.entry, t.exit].flatMap(function walk(g: Group): Condition[] {
-    return g.children.flatMap((ch) => (ch.kind === 'cond' ? (ch.custom ? [ch] : []) : walk(ch)));
-  });
+export function pineFor(t: StrategyTree, name: string, opts: PineOptions = {}): string[] {
+  const v: Vars = { defs: new Map() };
+  const entry = group(t.entry, v);
+  const exit = group(t.exit, v);
+  const timing = opts.timing ?? { entry: 'close', exit: 'close' };
   return [
     '//@version=5',
     `strategy("${name}", overlay=true)`,
     '',
-    ...vars.values(),
-    ...customs.map((c) => `custom${c.custom!.line} = ta.lowest(rsi, 10) < 40 // ${c.custom!.text}`),
+    ...defLines(v),
     '',
-    '// Entry · on candle close',
+    `// Entry · ${timing.entry === 'close' ? 'on candle close' : 'during the candle'}`,
     `longOk = ${entry}`,
-    'if longOk and barstate.isconfirmed',
+    timing.entry === 'close' ? 'if longOk and barstate.isconfirmed' : 'if longOk',
     '    strategy.entry("BUY", strategy.long)',
+    '',
     '// Exit',
     `if ${exit}`,
     '    strategy.close("BUY")',
   ];
+}
+
+export const pineText = (t: StrategyTree, name: string, opts?: PineOptions) => pineFor(t, name, opts).join('\n');
+
+/** The 1-based line where a custom logic variable is written. */
+export function lineOfVar(lines: string[], name: string): number {
+  const i = lines.findIndex((l) => new RegExp(`^${name}\\s*=`).test(l));
+  return i + 1;
 }
 
 /** Lines (1-based) in `after` that weren't in `before`. */

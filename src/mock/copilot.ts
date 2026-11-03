@@ -94,9 +94,9 @@ export const VAGUE_OPTIONS = [
 ];
 
 /* Partly fits: build anyway / simplify */
-export const partlyFitsEntry = (line: number) => [
+export const partlyFitsEntry = () => [
   cond(ind('rsi'), 'Cross Above', num(60)),
-  { ...cond(null, null, null), custom: { text: 'RSI was below 40 in the last 10 candles', line } },
+  { ...cond(null, null, null), custom: { text: 'RSI was below 40 in the last 10 candles', name: 'dipped', expr: 'ta.lowest(rsi, 10) < 40' } },
 ];
 export const simplifiedEntry = () => [cond(ind('rsi'), 'Cross Above', num(60)), cond(ind('rsi', { offset: 1 }), 'Less Than', num(40))];
 export function rsiExit() {

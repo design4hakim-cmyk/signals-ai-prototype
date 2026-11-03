@@ -48,8 +48,11 @@ export interface Condition {
   right: Operand | null;
   /** added or changed by Copilot: ✦ + violet until the user edits it */
   copilot?: boolean;
-  /** custom logic the canvas can't draw: runs on Pine Script code (design/copilot "Custom logic block") */
-  custom?: { text: string; line: number };
+  /**
+   * Custom logic the canvas can't draw: one block that runs on Pine Script code
+   * (design/pine-editor §5). `name = expr` is its line in the code; `text` says it in plain words.
+   */
+  custom?: { text: string; name: string; expr: string };
 }
 
 export type Logic = 'AND' | 'OR' | 'NONE';
