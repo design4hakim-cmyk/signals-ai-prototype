@@ -120,6 +120,7 @@ let fixedTimer: ReturnType<typeof setTimeout> | undefined;
 /** true while Run writes to the canvas, so the canvas → code sync doesn't answer itself */
 let applying = false;
 
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const nameNow = () => useStrategy.getState().name ?? 'Untitled strategy';
 /** The code the canvas writes right now. */
 export const canvasCode = () => pineText({ entry: C().entry, exit: C().exit }, nameNow(), { timing: C().timing });
@@ -223,7 +224,8 @@ export const usePine = create<PineState>((set, get) => {
         set({ running: false, problems: [], ran: code, memoryLines: r.memoryLines, banner: null });
         if (nothing) {
           // same blocks and timing: comments, spacing or names changed
-          log({ text: 'Ran · nothing to update', tone: 'ok' }, true);
+          if (opts.after) log({ text: opts.after, tone: 'ok' }, true);
+          log({ text: 'Ran · nothing to update', tone: 'ok' }, !opts.after);
           if (!opts.quiet) toast({ text: 'Ran · nothing to update', sub: 'Your edit didn’t change when trades fire' });
           return;
         }
@@ -237,7 +239,7 @@ export const usePine = create<PineState>((set, get) => {
         const what = r.codeOnly
           ? 'Canvas shows “Runs from Pine Script” · memory between candles'
           : r.customLines.length
-            ? `Canvas updated · ${Math.max(1, blocks - r.customLines.length)} block, ${r.customLines.length} custom logic (line ${r.customLines.join(', ')})`
+            ? `Canvas updated · ${plural(Math.max(1, blocks - r.customLines.length), 'block')}, ${r.customLines.length} custom logic (line ${r.customLines.join(', ')})`
             : `Canvas and chart updated · ${blocks} block${blocks === 1 ? '' : 's'} changed`;
         if (opts.after) log({ text: opts.after, tone: 'ok' }, true);
         log({ text: opts.after ? 'Compiled · canvas and chart updated' : what, tone: 'ok' }, !opts.after);

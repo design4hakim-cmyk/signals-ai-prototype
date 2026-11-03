@@ -398,7 +398,7 @@ export function PineView() {
         <div className="flex shrink-0 flex-col gap-2 bg-warn-tint px-3.5 py-2.5 text-label">
           <span className="flex flex-col gap-0.5">
             <span className="font-semibold text-warn-text">The canvas changed lines you’re editing</span>
-            <span className="text-text-secondary">You changed a block while lines {s.banner.lines[0]}{s.banner.lines[1] > s.banner.lines[0] ? `–${s.banner.lines[1]}` : ''} had edits that didn’t run.</span>
+            <span className="text-text-secondary">You changed a block while {s.banner.lines[1] > s.banner.lines[0] ? `lines ${s.banner.lines[0]}–${s.banner.lines[1]}` : `line ${s.banner.lines[0]}`} had edits that didn’t run.</span>
           </span>
           <span className="flex gap-2"><CardAction onClick={s.keepMine}>Keep my code</CardAction><Secondary onClick={s.useCanvasVersion}>Use the canvas version</Secondary></span>
         </div>

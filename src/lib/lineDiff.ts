@@ -43,13 +43,15 @@ export function hunks(base: string[], next: string[]): Hunk[] {
 
 /** 1-based lines of `next` that are new or changed compared with `base`. */
 export function changedSince(base: string[], next: string[]): number[] {
-  const matched = new Set(lcs(base, next).map(([, j]) => j));
+  // spacing doesn't count: re-aligning "ema9  =" after a longer name is added isn't a change
+  const flat = (ls: string[]) => ls.map((l) => l.replace(/\s+/g, ' ').trim());
+  const matched = new Set(lcs(flat(base), flat(next)).map(([, j]) => j));
   return next.map((l, j) => (!matched.has(j) && l.trim() ? j + 1 : 0)).filter(Boolean);
 }
 
-/** How many lines differ between two versions (for "Discarded 3 changes"). */
+/** How many separate edits there are between two versions (for "Discarded 3 changes"). */
 export function changeCount(a: string[], b: string[]) {
-  return hunks(a, b).reduce((n, h) => n + Math.max(h.to - h.from, h.lines.length), 0);
+  return hunks(a, b).length;
 }
 
 /**

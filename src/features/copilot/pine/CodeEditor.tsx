@@ -164,7 +164,8 @@ const theme = EditorView.theme({
   '.cm-fixed-token': { backgroundColor: 'var(--color-code-fixed-token)', borderRadius: '2px' },
   '.cm-find': { backgroundColor: 'var(--color-warn-tint)', outline: '1px solid var(--color-warn-dot)', borderRadius: '2px' },
   '.cm-find-current': { backgroundColor: 'var(--color-code-selection)', outline: '1px solid var(--color-brand)' },
-  '.cm-card-slot': { padding: '6px 12px 8px 46px', fontFamily: "'IBM Plex Sans', sans-serif", whiteSpace: 'normal' },
+  // under the broken line, in the code column; it keeps the panel's width (and stays put) when long lines scroll sideways
+  '.cm-card-slot': { position: 'sticky', left: '46px', width: '394px' /* 440 panel − 46 gutter */, boxSizing: 'border-box', padding: '6px 12px 8px 0', fontFamily: "'IBM Plex Sans', sans-serif", whiteSpace: 'normal' },
   // autocomplete (the shared popover look, 260w)
   '.cm-tooltip': { border: '1px solid var(--color-border-control)', borderRadius: '10px', backgroundColor: 'var(--color-surface)', boxShadow: 'var(--shadow-surface)', overflow: 'hidden' },
   '.cm-tooltip.cm-tooltip-autocomplete > ul': { fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: '11.5px', width: '260px', maxHeight: '200px', padding: '4px' },
