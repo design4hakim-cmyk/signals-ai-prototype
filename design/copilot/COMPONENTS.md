@@ -7,6 +7,7 @@ The source of truth is the four canvas boards in `reference/`. Each comes as `.h
 | `cp-components.html` | 0 Principles · 1 Atoms · 2 Molecules |
 | `cp-components-2.html` | 3 The AI card (all states) · 4 On the canvas · 5 The panel |
 | `cp-main-flow.html` | 3a · With Copilot: idea → understood → on canvas → check on chart (6 steps) |
+| `cp-build-fixes.html` | What the PR #12 build gets wrong, next to the design. Read `FIXES.md`. |
 | `cp-refine-edge-cases.html` | 3a · Refine and stay in sync (3 steps) · Copilot edge cases (6 cases) |
 
 This replaces the `CP-*` boards (CP-Main, CP-A02–A05, CP-B06–B08, CP-C09–C13) where they differ. The copy on those boards is kept.
@@ -82,15 +83,15 @@ This replaces the `CP-*` boards (CP-Main, CP-A02–A05, CP-B06–B08, CP-C09–C
 | What I understood | Context chips (NIFTY · Spot · 15m) → `ENTRY` label + assumed timing chip → each condition as a sentence of value chips → `ALL OF` / `ANY OF` label for joined rows → `EXIT` the same. **Hovering a row** gives it a `#F7F8FA` fill and "Shown on canvas" (blue, 11) on the right, and the matching block on the canvas shows its **hover ring** (editor layer, from the builder kit). |
 | Question | Grey inset (`#F7F8FA`, radius 10): question (13/500) + optional "1 of 2" counter (only when there are 2) + options. After answering, the chosen option stays visible and the others go disabled. |
 | Building | Spinner + "Adding entry conditions to canvas…" (13/600) + "1 of 2 placed" + Stop. A 3px progress bar under it: blue on blue tint. |
-| Applied | Footer: green check + "Added to canvas" + Undo. |
+| Applied | Footer, one row: muted note (12px) · tertiary link · Undo. **Never repeat the card title.** Default "Pine Script updated · View code · Undo"; custom logic "Custom logic is line 6 in Pine Script · Open · Undo". |
 | Proof | Grey inset: "Signals in the last 1Y" (11, muted) + signal counts + optional note ("Volume filter removed 5 weak signals") + **Check on chart** (outlined blue). |
 | Next steps | Follow-up chips after the last card: "Looks right · Run backtest" · "Fewer signals, please" · "Why no trade on 15 Mar?". |
 | Review a change | Title "2 changes to blocks you made" + warn icon. Diff rows (diff mark + sentence; a changed value shows ~~50~~ → 60). Impact strip: "Entries in 1Y: 9 → 6". Footer: Cancel (left) · Apply changes (outlined blue, right). |
 | Fit check | Title "1 of 2 conditions needs custom logic" + warn icon. One row per condition with its fit badge. A non-fitting row explains why in one plain sentence. Footer: Build anyway (outlined blue) · Simplify so it fits. |
-| Failure | Error card: "Couldn't add the 15:15 time exit" / "Your entry is saved. Nothing else changed." + collapsible "Details for support" (mono: reason + `ref #A41-7C`). Footer: Try again (outlined blue) · Add it on canvas · Skip exit (tertiary). |
+| Failure | **One** error card: "Couldn't add the 15:15 time exit" / "Your entry is saved. Nothing else changed." Inside it, what was kept is a grey row (✓ "Entry added · 3 conditions" + Undo). Then collapsible "Details for support" (mono: reason + `ref #A41-7C`). Footer: Try again (outlined blue) · Add it on canvas · Skip exit (tertiary). |
 | Vague prompt | "Which style do you want to trade?" + 3 two-line options (Follow the trend / Catch breakouts / Buy the dip) + "I'll describe my own idea" + "No strategy is guaranteed to profit. The backtest shows how it did in the past." |
-| Pine sync bar | Above the code in Pine view. Changed: `--color-ai-tint` bar, ✦ + "Copilot changed 2 lines · volume filter" + Undo. Synced: green tint, check + "In sync with canvas". |
-| Code view | Mono 11.5/19, line numbers in faint grey. Lines Copilot changed: `--color-ai-tint` fill + 2px `--color-ai` bar on the left. |
+| Pine sync bar | **Replaced by the Pine Script editor** (`design/pine-editor`): the Copilot-changed banner and the toolbar status chip. |
+| Code view | **Replaced by the Pine Script editor** (`design/pine-editor`). Copilot's lines keep the `--color-ai-tint` fill + 2px `--color-ai` bar. |
 | Prompt starters | Empty state only. Bordered list, each row = title (13/500) + description (12, muted). The whole row is the button; hover `#F7F8FA` + a round blue-tint arrow on the right. |
 
 ## The AI card · states (one card, changes in place)
@@ -136,7 +137,7 @@ This replaces the `CP-*` boards (CP-Main, CP-A02–A05, CP-B06–B08, CP-C09–C
   - **Empty:** "What should we build, Hakim?" (22/600) + "Describe entry and exit in plain words. I'll build it on the canvas." + starters.
   - **Conversation.**
   - **Building:** the input shows Stop.
-  - **Pine Script view:** sync bar + code + footer "Discard changes · Apply to strategy (outlined blue)". The input stays, with the placeholder "Ask about the code, or describe a change…".
+  - **Pine Script view:** the Pine Script editor from `design/pine-editor/COMPONENTS.md` (toolbar · code · log · Discard / Run · Ask box). "Apply to strategy" is gone: Run moves code into the canvas.
 
 ## Flows
 
