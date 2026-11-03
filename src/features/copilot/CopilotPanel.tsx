@@ -7,7 +7,7 @@ import { useBacktest } from '@/store/backtest';
 import { useCopilot } from '@/store/copilot';
 import { useStrategy } from '@/store/strategy';
 import { CopilotCard, Thinking } from './Cards';
-import { Secondary, Spark, UserBubble } from './parts';
+import { CodeGlyph, Secondary, Spark, UserBubble } from './parts';
 import { PineView } from './PineView';
 
 /** Right panel: Signals Copilot (design/copilot · Panel). 440px wide. */
@@ -83,16 +83,17 @@ export function CopilotPanel() {
 
   return (
     <aside aria-label="Signals Copilot" className="flex w-copilot shrink-0 flex-col">
-      <div className="flex h-topbar shrink-0 items-center gap-2.5 border-b border-border-divider px-4">
+      <div className="flex h-topbar shrink-0 items-center gap-2.5 border-b border-border-divider pr-3 pl-4">
         <Spark size={16} />
         <h2 className="m-0 text-body-lg font-semibold">Signals Copilot</h2>
         <button
           type="button"
           aria-pressed={view === 'pine'}
           onClick={() => setView(view === 'pine' ? 'chat' : 'pine')}
-          className={`h-7 rounded-control border px-2.5 font-mono text-label outline-none focus-visible:shadow-focus-ring ${view === 'pine' ? 'border-brand bg-brand-tint text-brand' : 'border-border-control bg-surface text-text-secondary hover:bg-surface-hover'}`}
+          // Plex 12.5 label; only the </> glyph is mono (FIXES.md 6)
+          className={`inline-flex h-7 items-center gap-1.5 rounded-segment-item border px-2.5 font-sans text-chip font-normal outline-none focus-visible:shadow-focus-ring ${view === 'pine' ? 'border-brand bg-brand-tint text-brand' : 'border-border-control bg-surface text-text-secondary hover:bg-surface-hover'}`}
         >
-          &lt;/&gt; Pine Script
+          <CodeGlyph /> Pine Script
         </button>
         <div className="grow" />
         <IconButton aria-label="New chat" onClick={() => { newChat(); setDraft(''); }}>
