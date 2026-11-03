@@ -1,5 +1,9 @@
 import { create } from 'zustand';
 import { INDEXES, SAVED_STRATEGIES, type SavedStrategy } from '@/mock/savedStrategies';
+import { complexStrategy, demoStrategy, emptyStrategy, groupedStrategy } from '@/mock/strategies';
+import { useBacktest } from './backtest';
+import { useCanvas } from './canvas';
+import { useCopilot } from './copilot';
 import { useStrategy, type RunningTrade } from './strategy';
 import { useWorkspace } from './workspace';
 
@@ -127,11 +131,24 @@ export const useLibrary = create<LibraryState>((set, get) => {
         forwardTests: mockTrades('forward', s.forwardTests),
         savedNames: get().strategies.filter((x) => x.id !== id).map((x) => x.name),
       });
+      // its blocks go on the canvas, and its saved setups come with results already run
+      const trees = [demoStrategy, groupedStrategy, complexStrategy];
+      useCopilot.getState().newChat();
+      useCanvas.setState({ codeOnly: false });
+      useCanvas.getState().load(trees[Math.max(0, get().strategies.findIndex((x) => x.id === id)) % trees.length]());
+      const bt = useBacktest.getState();
+      bt.set({ setups: [], strategyChange: null, run: null });
+      bt.addSaved(['saved-ss', 'saved-ic']);
+      bt.seedResults();
     },
 
     newStrategy: () => {
       set((st) => ({ openId: null, mode: st.mode === 'peek' ? 'closed' : st.mode }));
       useStrategy.setState({ ...useStrategy.getInitialState(), savedNames: get().strategies.map((x) => x.name) });
+      useCopilot.getState().newChat();
+      useCanvas.setState({ codeOnly: false });
+      useCanvas.getState().load(emptyStrategy());
+      useBacktest.getState().set({ setups: [], activeId: 'compare', strategyChange: null, run: null });
     },
 
     rename: (id, name) => {
