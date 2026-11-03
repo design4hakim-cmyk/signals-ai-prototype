@@ -6,7 +6,7 @@ import { copilotStarters, mockUser } from '@/mock/copilot';
 import { useBacktest } from '@/store/backtest';
 import { useCopilot } from '@/store/copilot';
 import { useStrategy } from '@/store/strategy';
-import { CopilotCard } from './Cards';
+import { CopilotCard, Thinking } from './Cards';
 import { SmallSecondary, Spark, UserBubble } from './parts';
 import { PineView } from './PineView';
 
@@ -16,16 +16,51 @@ export function CopilotPanel() {
   const canSend = draft.trim().length > 0;
   const mode = useStrategy((s) => s.mode);
   const active = useBacktest((s) => s.setups.find((x) => x.id === s.activeId));
-  const { messages, view, listening, send, stop, setView, newChat, set } = useCopilot();
+  const { messages, view, listening, typing, send, stop, setView, newChat, set } = useCopilot();
   const building = messages.some((m) => m.kind === 'card' && ((m.card.kind === 'main' && (m.card.phase === 'building' || m.card.phase === 'thinking')) || (m.card.kind === 'failed' && m.card.phase === 'thinking')));
   const ready = mode === 'backtest' && active?.status === 'current' && active.results && !active.results.noTrades ? active : null;
   const thread = useRef<HTMLDivElement>(null);
+  const hasThread = messages.length > 0;
+  const followRef = useRef<() => void>(() => {});
   const [secs, setSecs] = useState(0);
 
-  // keep the newest card in view
+  // Follow the conversation: when something new arrives or a card grows, glide to the bottom,
+  // unless you've scrolled up to read (then leave the scroll alone).
   useEffect(() => {
-    thread.current?.scrollTo({ top: thread.current.scrollHeight, behavior: 'smooth' });
-  }, [messages]);
+    const el = thread.current;
+    if (!el) return;
+    let pinned = true;
+    const nearBottom = () => el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    // only YOU can unpin it (wheel, touch, keys); our own glide never does
+    const onUser = () => setTimeout(() => { pinned = nearBottom(); }, 0);
+    const onScroll = () => { if (nearBottom()) pinned = true; };
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    const follow = () => {
+      if (!pinned) return;
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      // if the glide was cut short (or the tab is in the background), land exactly at the bottom
+      clearTimeout(settle);
+      settle = setTimeout(() => pinned && (el.scrollTop = el.scrollHeight), 450);
+    };
+    followRef.current = follow;
+    const ro = new ResizeObserver(follow);
+    ro.observe(el.firstElementChild!);
+    el.addEventListener('scroll', onScroll);
+    el.addEventListener('wheel', onUser, { passive: true });
+    el.addEventListener('touchmove', onUser, { passive: true });
+    el.addEventListener('keydown', onUser);
+    follow();
+    return () => {
+      clearTimeout(settle);
+      ro.disconnect();
+      el.removeEventListener('scroll', onScroll);
+      el.removeEventListener('wheel', onUser);
+      el.removeEventListener('touchmove', onUser);
+      el.removeEventListener('keydown', onUser);
+    };
+  }, [view, hasThread]);
+  // and on every new message or card change (cards grow in place)
+  useEffect(() => followRef.current(), [messages, typing]);
 
   // fake voice input: counts up, then types the idea
   useEffect(() => {
@@ -71,10 +106,16 @@ export function CopilotPanel() {
       {view === 'pine' ? (
         <PineView />
       ) : messages.length ? (
-        <div ref={thread} className="flex min-h-0 grow flex-col gap-3 overflow-auto px-4 pt-4 pb-2">
-          {messages.map((m, i) =>
-            m.kind === 'user' ? <UserBubble key={m.id}>{m.text}</UserBubble> : <CopilotCard key={m.id} card={m.card} last={i === messages.length - 1} />,
-          )}
+        // the thread scrolls; each message keeps its full height (never squeezed or clipped)
+        <div ref={thread} className="min-h-0 grow overflow-y-auto overscroll-contain">
+          <div className="flex flex-col gap-3 px-4 pt-4 pb-3">
+            {messages.map((m, i) => (
+              <div key={m.id} className="flex shrink-0 animate-msg-in flex-col gap-3">
+                {m.kind === 'user' ? <UserBubble>{m.text}</UserBubble> : <CopilotCard card={m.card} last={i === messages.length - 1} />}
+              </div>
+            ))}
+            {typing && <Thinking />}
+          </div>
         </div>
       ) : ready ? (
         <BacktestReady name={ready.name} onAsk={setDraft} />

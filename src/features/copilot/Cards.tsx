@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { describeCondition, flatConditions } from '@/lib/conditions';
-import { NEXT_STEPS } from '@/mock/copilot';
+import { exitFor, NEXT_STEPS } from '@/mock/copilot';
 import { useCanvas } from '@/store/canvas';
 import { EXIT_OPTIONS, VAGUE_OPTIONS, useCopilot, type Card } from '@/store/copilot';
 import { useWorkspace } from '@/store/workspace';
@@ -97,17 +97,17 @@ function Shell({ icon, title, sub, error, children, footer }: { icon: ReactNode;
       <header className="flex items-start gap-2 px-3.5 pt-3">
         <span className="pt-0.5">{icon}</span>
         <span className="flex flex-col">
-          <span className="text-body font-semibold">{title}</span>
+          <span key={String(title)} className="animate-fade-in text-body font-semibold">{title}</span>
           {sub && <span className="text-label text-text-muted">{sub}</span>}
         </span>
       </header>
       {children && <div className="flex flex-col gap-3 px-3.5 pt-2.5 pb-3.5">{children}</div>}
-      {footer && <footer className="flex flex-wrap items-center gap-2 border-t border-border-subtle px-3.5 py-2.5">{footer}</footer>}
+      {footer && <footer className="flex animate-fade-in flex-wrap items-center gap-2 border-t border-border-subtle px-3.5 py-2.5">{footer}</footer>}
     </article>
   );
 }
 
-const Inset = ({ children }: { children: ReactNode }) => <div className="flex flex-col gap-2 rounded-[10px] bg-surface-hover p-3">{children}</div>;
+const Inset = ({ children }: { children: ReactNode }) => <div className="flex animate-fade-in flex-col gap-2 rounded-[10px] bg-surface-hover p-3">{children}</div>;
 
 function Proof({ entries, exits, beforeEntries, note }: { entries: number; exits?: number; beforeEntries?: number; note?: string }) {
   const period = useWorkspace((s) => s.period);
@@ -146,12 +146,12 @@ export function CopilotCard({ card, last }: { card: Card; last: boolean }) {
         <Inset>
           <span className="text-body font-medium">How should it exit?</span>
           {EXIT_OPTIONS.map((o, i) => (
-            <AnswerOption key={o.label} label={o.label} suggested={o.suggested} chosen={q.chosen === i} disabled={q.chosen !== null && q.chosen !== i} onClick={() => cp.answer(card.id, i)} />
+            <AnswerOption key={o.label} label={i === 0 ? exitFor(card.entry).label : o.label} suggested={o.suggested} chosen={q.chosen === i} disabled={q.chosen !== null && q.chosen !== i} onClick={() => cp.answer(card.id, i)} />
           ))}
         </Inset>
       );
       if (card.phase === 'thinking')
-        return <Shell icon={<StatusIcon kind="working" />} title="Reading your idea…" />;
+        return <Thinking text="Reading your idea" />;
       if (card.phase === 'understood')
         return (
           <Shell icon={<Spark />} title="Here’s what I understood">
@@ -208,11 +208,11 @@ export function CopilotCard({ card, last }: { card: Card; last: boolean }) {
       return (
         <Shell
           icon={<StatusIcon kind="done" />}
-          title="Added 1 condition to Entry"
+          title={`Added 1 condition to ${card.side === 'exit' ? 'Exit' : 'Entry'}`}
           footer={<><span className="grow text-label text-text-secondary">Pine Script updated</span><SmallSecondary tertiary onClick={() => cp.setView('pine')}>View code</SmallSecondary><SmallSecondary onClick={() => cp.undo(card.id)}>Undo</SmallSecondary></>}
         >
           <span className="flex items-center gap-2"><DiffMark kind="added" /><Sentence c={card.added} /></span>
-          <Proof entries={card.after.entries} beforeEntries={card.before.entries} note={card.after.entries < card.before.entries ? `Volume filter removed ${card.before.entries - card.after.entries} weak signal${card.before.entries - card.after.entries > 1 ? 's' : ''}` : undefined} />
+          <Proof entries={card.after.entries} exits={card.side === 'exit' ? card.after.exits : undefined} beforeEntries={card.before.entries} note={card.after.entries < card.before.entries ? `Volume filter removed ${card.before.entries - card.after.entries} weak signal${card.before.entries - card.after.entries > 1 ? 's' : ''}` : undefined} />
         </Shell>
       );
 
@@ -309,6 +309,38 @@ export function CopilotCard({ card, last }: { card: Card; last: boolean }) {
       );
 
     case 'note':
-      return <Shell icon={<Spark />} title={<span className="font-normal">{card.text}</span>} />;
+      return <TextReply text={card.text} />;
   }
+}
+
+/* ── Plain replies: words, like a chat (no card box) ───────────── */
+
+/** ✦ and three soft dots while a reply is on its way. */
+export function Thinking({ text }: { text?: string }) {
+  return (
+    <div className="flex animate-msg-in items-center gap-2 py-1 text-label text-text-muted" aria-live="polite">
+      <Spark />
+      {text && <span>{text}</span>}
+      <span className="flex gap-1" aria-label="Copilot is thinking">
+        {[0, 1, 2].map((i) => <span key={i} className="size-1.5 animate-typing rounded-full bg-text-tertiary" style={{ animationDelay: `${i * 160}ms` }} />)}
+      </span>
+    </div>
+  );
+}
+
+/** The answer streams in word by word, then stays put. */
+function TextReply({ text }: { text: string }) {
+  const words = text.split(' ');
+  const [shown, setShown] = useState(1);
+  useEffect(() => {
+    if (shown >= words.length) return;
+    const t = setTimeout(() => setShown((n) => n + 1), 28);
+    return () => clearTimeout(t);
+  }, [shown, words.length]);
+  return (
+    <div className="flex gap-2 text-body leading-[1.55] text-text-primary">
+      <span className="pt-1"><Spark /></span>
+      <p className="m-0">{words.slice(0, shown).join(' ')}</p>
+    </div>
+  );
 }

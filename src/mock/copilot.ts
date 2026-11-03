@@ -1,5 +1,5 @@
 import type { CopilotStarter } from '@/types/market';
-import type { Condition } from '@/types/strategy';
+import type { Condition, Operand } from '@/types/strategy';
 import { cond, ind, num } from './strategies';
 
 /*
@@ -16,24 +16,32 @@ export const copilotStarters: CopilotStarter[] = [
 
 export const mockUser = { firstName: 'Hakim' };
 
-export type ScriptId = 'why' | 'main' | 'refineAdd' | 'review' | 'partlyFits' | 'codeOnly' | 'failed' | 'vague';
+export type ScriptId = 'chat' | 'why' | 'exit' | 'main' | 'refineAdd' | 'review' | 'partlyFits' | 'codeOnly' | 'failed' | 'vague';
 
-/** Which scripted reply a prompt gets. */
+/**
+ * Which scripted reply a prompt gets. Plain questions and small talk get a text answer;
+ * only a described strategy builds; "make me money" asks for a style (design/copilot · Edge cases).
+ */
 export function matchScript(text: string): { id: ScriptId; entry?: () => Condition[] } {
-  const t = text.toLowerCase();
+  const t = text.toLowerCase().trim();
   if (/profitab|make me money|best strategy|guaranteed/.test(t)) return { id: 'vague' };
-  if (/why no trade|why didn.t/.test(t)) return { id: 'why' };
+  if (/why no trade|why didn.t|why did(n.t)? it not/.test(t)) return { id: 'why' };
   if (/at least once in the last/.test(t)) return { id: 'partlyFits' };
   if (/re-?arm/.test(t)) return { id: 'codeOnly' };
   if (/vwap/.test(t) && /3:15|15:15/.test(t)) return { id: 'failed' };
   if (/stricter|fewer signals|drop the|remove the/.test(t)) return { id: 'review' };
   if (/volume/.test(t) && /average|above|filter/.test(t)) return { id: 'refineAdd' };
+  // asking for an exit only (no entry words): add it to Exit
+  if (/\bexit|sell when|close (the )?(trade|position)|get out/.test(t) && !/\b(buy|enter|entry|long)\b/.test(t)) return { id: 'exit' };
+  // a question or small talk is answered in words, never by building
+  if (/\?$/.test(t) || /^(hi|hey|hello|thanks|thank you|ok|okay|what|why|how|did|does|do|is|are|can|could|should|when|where|which|explain|tell me)\b/.test(t)) return { id: 'chat' };
+  if (/macd/.test(t) && /\bma\b|moving average|crossover/.test(t) && /confirm/.test(t)) return { id: 'main', entry: maMacdEntry };
   if (/macd/.test(t)) return { id: 'main', entry: macdEntry };
   if (/moving average|\bma\b|\bsma\b/.test(t) && !/ema/.test(t)) return { id: 'main', entry: smaEntry };
   if (/breakout|bollinger/.test(t)) return { id: 'main', entry: breakoutEntry };
   if (/dip|rsi below 30|oversold/.test(t)) return { id: 'main', entry: dipEntry };
   if (/ema|rsi|cross|trend/.test(t)) return { id: 'main', entry: mainEntry };
-  return { id: 'vague' };
+  return { id: 'chat' };
 }
 
 /* ── Entries each script builds ────────────────────────────────── */
@@ -45,6 +53,10 @@ export const mainEntry = () => [
 const smaEntry = () => [cond(ind('sma', { length: 9 }), 'Cross Above', ind('sma', { length: 21 }))];
 // MACD isn't a canvas indicator: its line crossing is the EMA 12 / EMA 26 cross
 const macdEntry = () => [cond(ind('ema', { length: 12 }), 'Cross Above', ind('ema', { length: 26 }))];
+const maMacdEntry = () => [
+  cond(ind('sma', { length: 9 }), 'Cross Above', ind('sma', { length: 21 })),
+  cond(ind('ema', { length: 12 }), 'Greater Than', ind('ema', { length: 26 })),
+];
 const breakoutEntry = () => [
   cond(ind('price'), 'Cross Above', ind('bb', { band: 'Upper' })),
   cond(ind('volume'), 'Greater Than', ind('sma', { length: 20, source: 'Volume' }, { op: '×', value: 1.5 })),
@@ -54,6 +66,21 @@ const dipEntry = () => [cond(ind('rsi'), 'Cross Above', num(30))];
 export const mainExit = () => cond(ind('ema', { length: 9 }), 'Cross Below', ind('ema', { length: 21 }));
 export const volumeFilter = () => cond(ind('volume'), 'Greater Than', ind('sma', { length: 20, source: 'Volume' }));
 
+const short = (o: Operand) =>
+  o.type === 'number' ? String(o.value) : o.id === 'sma' ? `MA ${o.params.length}` : o.id === 'ema' ? `EMA ${o.params.length}` : o.id === 'price' ? 'Close' : o.id.toUpperCase();
+
+/** The suggested exit mirrors the entry: a cross above exits on the same cross below. */
+export function exitFor(entry: Condition[]): { label: string; cond: () => Condition } {
+  const cross = entry.find((c) => c.relation === 'Cross Above' && c.left?.type === 'indicator' && c.right?.type === 'indicator' && c.left.id !== 'price');
+  if (cross?.left && cross.right) {
+    const { left, right } = cross;
+    return { label: `${short(left)} crosses below ${short(right)}`, cond: () => cond(structuredClone(left), 'Cross Below', structuredClone(right)) };
+  }
+  if (entry.some((c) => c.left?.type === 'indicator' && c.left.id === 'rsi')) return { label: 'RSI drops below 50', cond: rsiExit };
+  return { label: 'EMA 9 crosses below EMA 21', cond: mainExit };
+}
+
+/** First option is replaced per card by exitFor(entry). */
 export const EXIT_OPTIONS = [
   { label: 'EMA 9 crosses below EMA 21', suggested: true },
   { label: 'At a fixed time, 15:15' },
@@ -72,7 +99,9 @@ export const partlyFitsEntry = (line: number) => [
   { ...cond(null, null, null), custom: { text: 'RSI was below 40 in the last 10 candles', line } },
 ];
 export const simplifiedEntry = () => [cond(ind('rsi'), 'Cross Above', num(60)), cond(ind('rsi', { offset: 1 }), 'Less Than', num(40))];
-export const rsiExit = () => cond(ind('rsi'), 'Less Than', num(50));
+export function rsiExit() {
+  return cond(ind('rsi'), 'Less Than', num(50));
+}
 
 /* Build failed, partly: the entry goes on, the 15:15 time exit doesn't */
 export const vwapEntry = () => [

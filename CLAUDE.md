@@ -59,7 +59,6 @@ src/
     copilot/               Copilot panel (design/copilot): parts (atoms), Cards (the one AI card, every state), PineView, CopilotPanel
     strategies/            My Strategies panel (design/strategies-panel): parts, rows, menus, StrategiesPanel; stories in strategies/stories
     trade/                 the one Trade popup (top nav Trade, panel Trade, ⋯ → Trade…). Placeholder until phase 7
-    scenarios/             ◐ Scenarios switcher. PROTOTYPE ONLY review helper
   store/                   Zustand stores: canvas (conditions, selection, undo, camera), library (saved strategies, panel), workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups), results (how the results page is viewed: VIX filter, sort, Monte Carlo), copilot (scripted chat: cards change state in place; previews and pending changes live in canvas)
   mock/                    dummy data: seeded candles, instruments, example + saved strategies, Copilot starters
   lib/                     pure logic: indicators, conditions (tree edits, 2-level depth, dissolve), signals (evaluates the tree + limits), describeChartData, backtestData (results maths from mock-results.json), pine (Pine Script written from the canvas)
@@ -72,12 +71,12 @@ src/
 - Run status and saved status never share a button (Run lives in the tab row, Save/Update setup in the header).
 - Perpetual Future is crypto-only (disabled for indices with "Only for crypto").
 - Mock data is seeded: same inputs → same chart and results.
-- Add new review states to `features/scenarios/ScenarioPanel.tsx`, since many states can't be reached by clicking until the canvas builder exists.
+- No Scenarios switcher (Hakim removed it on 3 Nov): every state must be reachable by clicking through the real flow. Storybook shows component states.
 
 ## Workflow
 1. Never commit to `main` directly. Create a branch (lowercase-with-hyphens, e.g. `phase-2-canvas-builder`), or keep adding to the open review branch if Hakim says so.
 2. Small, named commits. End commit messages with the attribution lines your harness provides.
-3. Push, then open or update the PR with: what's in it, **design decisions to review**, and how to review (preview link + which Scenarios to try).
+3. Push, then open or update the PR with: what's in it, **design decisions to review**, and how to review (preview link + what to click).
 4. Hakim reviews on the Vercel preview and merges. Don't merge for him unless asked.
 5. **Only touch this repo.** Never push to his other repos (e.g. `Portfolio-website-V2`, `hakimsingh`).
 

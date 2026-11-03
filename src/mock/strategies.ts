@@ -3,7 +3,7 @@ import { indicatorDef } from '@/lib/indicators';
 import type { Condition, Group, IndicatorId, IndicatorParams, Logic, MathStep, Operand, Relation, StrategyNode, StrategyTree } from '@/types/strategy';
 
 /*
-  Example strategies from the boards, for the Scenarios switcher.
+  Example strategies from the boards (saved strategies open with these).
   Each call makes fresh ids, so loading one twice never clashes.
 */
 

@@ -4,7 +4,6 @@ import { BottomPanel } from '@/features/bottom-bar/BottomPanel';
 import { StrategyCanvas } from '@/features/canvas/StrategyCanvas';
 import { ContextBar } from '@/features/context-bar/ContextBar';
 import { CopilotPanel } from '@/features/copilot/CopilotPanel';
-import { ScenarioPanel } from '@/features/scenarios/ScenarioPanel';
 import { StrategiesPanel } from '@/features/strategies/StrategiesPanel';
 import { TradePopup } from '@/features/trade/TradePopup';
 import { useLibrary } from '@/store/library';
@@ -42,7 +41,6 @@ export function Workspace() {
         )}
       </main>
       <CopilotPanel />
-      <ScenarioPanel />
       <Toast text={toast} />
       <TradePopup />
     </div>
