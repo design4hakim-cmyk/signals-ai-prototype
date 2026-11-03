@@ -5,11 +5,13 @@ import { describeCondition, isComplete } from '@/lib/conditions';
 import { INDICATORS, fmtNum, indicatorDef, inputFields, mathLabel, operandLabel } from '@/lib/indicators';
 import { useCanvas, type EditorPart } from '@/store/canvas';
 import { useCopilot } from '@/store/copilot';
+import { usePine } from '@/store/pine';
+import { lineOfVar } from '@/lib/pine';
 import type { Condition, IndicatorParams, Operand } from '@/types/strategy';
 import { FieldAtom, MathChip } from './kit/atoms';
 import { ConditionBlock, type Joinable } from './kit/ConditionBlock';
 import { DragHandle, MoreButton } from './kit/controls';
-import { ArithmeticMenu, BlockMenu, IndicatorPicker, IndicatorSettings, RelationMenu, type SettingField } from './kit/menus';
+import { ArithmeticMenu, BlockMenu, IndicatorPicker, IndicatorSettings, MenuRow, MenuSurface, RelationMenu, type SettingField } from './kit/menus';
 
 /*
   A condition on the real canvas, built only from kit parts
@@ -33,11 +35,18 @@ export function CanvasBlock({ cond, joinable, changed }: { cond: Condition; join
   );
 }
 
-/** "At least once in the last N candles" can't be drawn: one block that runs on code (design/copilot · Canvas states). */
+/**
+ * Custom logic (design/pine-editor §5): code the canvas can't draw, as one read-only block.
+ * Grey when you wrote it, violet + ✦ when Copilot did. A click opens the editor at its line.
+ */
 function CustomBlock({ cond }: { cond: Condition }) {
   const linked = useCanvas((s) => s.linkedHover === cond.id);
-  const { remove } = useCanvas.getState();
+  const mine = useCanvas((s) => (s.editor?.id === cond.id ? s.editor.part : null));
+  const { remove, openEditor, closeEditor } = useCanvas.getState();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: cond.id });
+  const line = usePine((s) => lineOfVar(s.ran.split('\n'), cond.custom!.name)) || 1;
+  const usedOn = usePine((s) => s.ran.split('\n').map((l, i) => (i + 1 !== line && new RegExp(`\\b${cond.custom!.name}\\b`).test(l) ? i + 1 : 0)).find(Boolean));
+  const open = () => { closeEditor(); useCopilot.getState().openLine(line); };
   return (
     <ConditionBlock
       nodeId={cond.id}
@@ -45,13 +54,25 @@ function CustomBlock({ cond }: { cond: Condition }) {
       label={cond.custom!.text}
       look={isDragging ? 'dragSource' : cond.copilot ? 'copilot' : 'normal'}
       linked={linked}
-      moreSlot={<MoreButton label="Delete custom logic" onClick={() => remove([cond.id])} />}
+      keepControls={mine === 'more'}
+      moreSlot={
+        <Popover floating align="right" open={mine === 'more'} onClose={closeEditor} trigger={<MoreButton open={mine === 'more'} label="Custom logic actions" onClick={() => (mine === 'more' ? closeEditor() : openEditor(cond.id, 'more'))} />}>
+          <MenuSurface width={240} label="Custom logic actions">
+            <div className="flex flex-col p-1">
+              <MenuRow shortcut="↵" onClick={open}>Open in code</MenuRow>
+              <MenuRow destructive shortcut="⌫" hint={`Deleting removes line${usedOn ? `s ${line} and ${usedOn}` : ` ${line}`}`} onClick={() => remove([cond.id])}>Delete</MenuRow>
+            </div>
+          </MenuSurface>
+        </Popover>
+      }
       handleSlot={<span {...attributes} {...listeners}><DragHandle dragging={isDragging} /></span>}
     >
-      <span aria-hidden="true" className="flex size-7 items-center justify-center rounded-[6px] bg-surface-selected font-mono text-label font-semibold text-text-secondary">&lt;/&gt;</span>
-      <span className="px-1 text-chip">{cond.custom!.text}</span>
-      <button type="button" onClick={() => useCopilot.getState().openLine(cond.custom!.line)} className="rounded-chip px-1.5 text-label font-medium text-brand hover:bg-brand-tint">
-        Open line {cond.custom!.line}
+      <button type="button" onClick={open} className="flex items-center gap-1.5 text-left outline-none" title="Open in the Pine Script editor">
+        <span aria-hidden="true" className="flex size-7 items-center justify-center rounded-[6px] bg-surface-selected font-mono text-label font-semibold text-text-secondary">&lt;/&gt;</span>
+        <span className="px-1 text-chip text-text-primary">{cond.custom!.text}</span>
+      </button>
+      <button type="button" onClick={open} className="rounded-chip px-1.5 text-label font-medium text-brand hover:bg-brand-tint">
+        Open line {line}
       </button>
     </ConditionBlock>
   );

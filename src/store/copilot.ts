@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { describeCondition, findNode, flatConditions, removeNodes, replaceNode, uid } from '@/lib/conditions';
-import { pineFor } from '@/lib/pine';
 import { computeSignals } from '@/lib/signals';
 import { generateSeries } from '@/mock/candles';
 import {
@@ -9,6 +8,8 @@ import {
 import type { Condition, Side } from '@/types/strategy';
 import { useBacktest } from './backtest';
 import { useCanvas } from './canvas';
+import { usePine } from './pine';
+import { CODE_ONLY } from '@/mock/pine';
 import { useStrategy } from './strategy';
 import { useWorkspace } from './workspace';
 
@@ -51,15 +52,12 @@ export type Message = { kind: 'user'; id: string; text: string } | { kind: 'card
 interface CopilotState {
   messages: Message[];
   view: 'chat' | 'pine';
-  /** the code as it was before Copilot's last change; null = in sync */
-  pineBase: string[] | null;
-  pineNote: string;
-  focusLine: number | null;
   listening: boolean;
   /** a reply is on its way (the ✦ … indicator) */
   typing: boolean;
 
-  send: (text: string) => void;
+  /** `stay`: asked from the Pine Script editor's Ask box, so the editor stays open */
+  send: (text: string, opts?: { stay?: boolean }) => void;
   answer: (cardId: string, option: number) => void;
   stop: () => void;
   resume: (cardId: string) => void;
@@ -77,8 +75,6 @@ interface CopilotState {
   runBacktest: () => void;
   setView: (v: 'chat' | 'pine') => void;
   openLine: (line: number) => void;
-  discardCode: () => void;
-  applyCode: () => void;
   newChat: () => void;
   set: (p: Partial<CopilotState>) => void;
 }
@@ -110,7 +106,6 @@ export function countsNow(): Counts {
 }
 
 const strategyName = () => useStrategy.getState().name ?? 'Untitled strategy';
-const pineNow = () => pineFor(tree(), strategyName(), { codeOnly: C().codeOnly });
 /** Empty both sections as one undoable step. */
 const clearCanvas = () => {
   C().set({ codeOnly: false });
@@ -149,7 +144,17 @@ export const useCopilot = create<CopilotState>((set, get) => {
     set((s) => ({ messages: s.messages.map((m) => (m.kind === 'card' && m.id === id ? { ...m, card: { ...m.card, ...p } as Card } : m)) }));
   const cardOf = (id: string) => get().messages.find((m): m is Extract<Message, { kind: 'card' }> => m.kind === 'card' && m.id === id)?.card;
   /** remember the code just before a Copilot change, so the Pine view can highlight what it changed */
-  const markPine = (note: string) => set({ pineBase: pineNow(), pineNote: note });
+  /**
+   * Copilot is about to change the canvas: remember the code first. Once the change lands
+   * (same tick), the editor shows the changed lines in violet with "Copilot changed N lines · note".
+   */
+  const markPine = (note: string) => {
+    const before = usePine.getState().ran;
+    queueMicrotask(() => {
+      const last = [...get().messages].reverse().find((m) => m.kind === 'card' && 'mark' in m.card);
+      usePine.getState().copilotChanged(before, note, () => last && get().undo(last.id));
+    });
+  };
 
   /** Place conditions one by one (ghosts), then commit them as one step (one Undo). */
   const build = (cardId: string, side: Side, conds: Condition[], from: number, done: () => void) => {
@@ -238,7 +243,7 @@ export const useCopilot = create<CopilotState>((set, get) => {
     listening: false,
     typing: false,
 
-    send: (raw) => {
+    send: (raw, opts = {}) => {
       const text = raw.trim();
       if (!text) return;
       // an open question takes the typed answer
@@ -250,7 +255,8 @@ export const useCopilot = create<CopilotState>((set, get) => {
         return get().answer(open.id, /15:15|time|3:15/.test(t) ? 1 : /canvas|myself|i'll/.test(t) ? 2 : 0);
       }
       add({ kind: 'user', id: uid('u'), text });
-      set({ view: 'chat', typing: true });
+      if (!opts.stay) get().setView('chat');
+      set({ typing: true });
       const m = matchScript(text);
       const id = uid('card');
       switch (m.id) {
@@ -313,8 +319,8 @@ export const useCopilot = create<CopilotState>((set, get) => {
           return later(TIMING.understood, () => card({ kind: 'fit', id, phase: 'check', counts: null, mark: C().history.length }));
         case 'codeOnly':
           return later(TIMING.understood, () => {
-            markPine('runs from code');
-            C().set({ codeOnly: true, copilotPreview: null });
+            C().set({ copilotPreview: null });
+            usePine.getState().copilotCode(CODE_ONLY.replace('EMA 9/21 + RSI Trend', strategyName()), 'runs from code');
             card({ kind: 'codeOnly', id });
           });
         case 'failed': {
@@ -368,7 +374,7 @@ export const useCopilot = create<CopilotState>((set, get) => {
       if (!c || !('mark' in c)) return;
       while (C().history.length > c.mark) C().undo();
       C().set({ copilotPreview: null, pending: null, toast: null });
-      set({ pineBase: null });
+      usePine.setState({ aiLines: [] });
       add({ kind: 'card', id: uid('card'), card: { kind: 'note', id: uid('n'), text: 'Undone. The canvas is back to how it was.' } });
     },
 
@@ -394,9 +400,8 @@ export const useCopilot = create<CopilotState>((set, get) => {
     buildAnyway: (id) => {
       const mark = C().history.length;
       clearCanvas(); // a new strategy, as one step (Undo brings the old one back)
-      const line = 5; // where pineFor() writes it: after the version, title and the RSI line
       markPine('custom logic');
-      C().copilotAdd('entry', partlyFitsEntry(line), 'Copilot added a custom logic entry', 1);
+      C().copilotAdd('entry', partlyFitsEntry(), 'Copilot added a custom logic entry', 1);
       C().copilotAdd('exit', [rsiExit()], 'Copilot added the exit', 0);
       C().showToast('Added to canvas · 1 custom block', true, 'ai');
       // the custom block runs on code, so the counts are the board's
@@ -445,18 +450,25 @@ export const useCopilot = create<CopilotState>((set, get) => {
       setTimeout(() => useBacktest.getState().runBacktests(), 0);
     },
 
-    setView: (view) => set({ view, focusLine: null }),
-    openLine: (line) => set({ view: 'pine', focusLine: line }),
-    discardCode: () => {
-      const last = [...get().messages].reverse().find((m) => m.kind === 'card' && 'mark' in m.card);
-      if (last && last.kind === 'card') get().undo(last.id);
-      set({ pineBase: null, view: 'chat' });
+    // the Pine Script toggle: opening takes the editor's snapshot, closing keeps an un-run draft
+    setView: (view) => {
+      if (view === get().view) return;
+      if (view === 'pine') usePine.getState().openEditor();
+      else usePine.getState().closeEditor();
+      set({ view });
     },
-    applyCode: () => set({ pineBase: null }),
+    openLine: (line) => {
+      if (get().view === 'pine') usePine.getState().goTo(line);
+      else {
+        usePine.getState().openEditor(line);
+        set({ view: 'pine' });
+      }
+    },
     newChat: () => {
       stopTimers();
       C().set({ copilotPreview: null, pending: null });
-      set({ messages: [], view: 'chat', pineBase: null, typing: false });
+      if (get().view === 'pine') usePine.getState().closeEditor();
+      set({ messages: [], view: 'chat', typing: false });
     },
     set: (p) => set(p),
   };

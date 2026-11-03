@@ -5,6 +5,7 @@ import { copilotTake, kiloRupees, resultsView, variantFor } from '@/lib/backtest
 import { copilotStarters, mockUser } from '@/mock/copilot';
 import { useBacktest } from '@/store/backtest';
 import { useCopilot } from '@/store/copilot';
+import { usePine } from '@/store/pine';
 import { useStrategy } from '@/store/strategy';
 import { CopilotCard, Thinking } from './Cards';
 import { CodeGlyph, Secondary, Spark, UserBubble } from './parts';
@@ -21,6 +22,7 @@ export function CopilotPanel() {
   const ready = mode === 'backtest' && active?.status === 'current' && active.results && !active.results.noTrades ? active : null;
   const thread = useRef<HTMLDivElement>(null);
   const hasThread = messages.length > 0;
+  const codeDraft = usePine((p) => p.draft);
   const followRef = useRef<() => void>(() => {});
   const [secs, setSecs] = useState(0);
 
@@ -91,9 +93,11 @@ export function CopilotPanel() {
           aria-pressed={view === 'pine'}
           onClick={() => setView(view === 'pine' ? 'chat' : 'pine')}
           // Plex 12.5 label; only the </> glyph is mono (FIXES.md 6)
-          className={`inline-flex h-7 items-center gap-1.5 rounded-segment-item border px-2.5 font-sans text-chip font-normal outline-none focus-visible:shadow-focus-ring ${view === 'pine' ? 'border-brand bg-brand-tint text-brand' : 'border-border-control bg-surface text-text-secondary hover:bg-surface-hover'}`}
+          className={`relative inline-flex h-7 items-center gap-1.5 rounded-segment-item border px-2.5 font-sans text-chip font-normal outline-none focus-visible:shadow-focus-ring ${view === 'pine' ? 'border-brand bg-brand-tint text-brand' : 'border-border-control bg-surface text-text-secondary hover:bg-surface-hover'}`}
         >
           <CodeGlyph /> Pine Script
+          {/* code that hasn't run waits as a draft */}
+          {codeDraft && view !== 'pine' && <span aria-label="Code not run yet" title="Code not run yet" className="absolute -top-1 -right-1 size-2 rounded-full bg-brand ring-2 ring-surface" />}
         </button>
         <div className="grow" />
         <IconButton aria-label="New chat" onClick={() => { newChat(); setDraft(''); }}>
@@ -139,6 +143,7 @@ export function CopilotPanel() {
         </div>
       )}
 
+      {view !== 'pine' && (
       <div className="shrink-0 px-4 pt-3 pb-2.5">
         <div className="flex flex-col gap-2 rounded-card border border-border-control bg-surface px-3 py-2.5 hover:border-border-strong focus-within:shadow-focus-ring">
           {listening ? (
@@ -183,6 +188,7 @@ export function CopilotPanel() {
         </div>
         <p className="m-0 mt-2 text-center text-caption text-text-subtle">AI-generated strategies can contain bugs. Check them on the chart.</p>
       </div>
+      )}
     </aside>
   );
 }

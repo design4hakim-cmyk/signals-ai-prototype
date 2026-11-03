@@ -213,6 +213,22 @@
   --spacing-control-sm: 32px; /* dropdowns */
   --spacing-control-xs: 28px;
 
+  /* ── Pine Script editor (design/pine-editor · Atoms). Aliases of existing colours, so the code
+        reads in the same palette as the rest of the app. */
+  --color-code-keyword: var(--color-brand-text); /* if, and, ta.ema, strategy.entry */
+  --color-code-builtin: var(--color-brand); /* close, volume, true, strategy.long */
+  --color-code-string: var(--color-buy-text);
+  --color-code-number: var(--color-warn-text);
+  --color-code-comment: var(--color-text-muted);
+  --color-code-text: var(--color-text-primary);
+  --color-code-line-number: var(--color-text-disabled);
+  --color-code-selection: #c4dff5; /* builder kit "blue pressed" (atom-states.ts) */
+  --color-code-fixed-token: #c9edd5; /* the token an AI fix just changed */
+  --color-code-log: #fbfcfd; /* log strip under the code */
+  --color-code-diff-minus: #8f1d1d; /* − row text on error-bg */
+  --color-code-diff-plus: #1c5e2e; /* + row text on buy-tint */
+  --color-code-radio-off: var(--color-group-edge);
+
   /* ── Motion: Copilot replies arrive softly (fade + small rise), like a chat */
   --animate-msg-in: msg-in 320ms cubic-bezier(0.2, 0, 0, 1) both;
   --animate-fade-in: fade-in 240ms ease-out both;

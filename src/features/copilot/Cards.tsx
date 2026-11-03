@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { describeCondition, flatConditions } from '@/lib/conditions';
 import { exitFor, NEXT_STEPS } from '@/mock/copilot';
+import { lineOfVar } from '@/lib/pine';
 import { useCanvas } from '@/store/canvas';
+import { usePine } from '@/store/pine';
 import { EXIT_OPTIONS, VAGUE_OPTIONS, useCopilot, type Card } from '@/store/copilot';
 import { useWorkspace } from '@/store/workspace';
 import type { Condition, Operand } from '@/types/strategy';
@@ -168,6 +170,8 @@ const Question = ({ title, children }: { title: string; children: ReactNode }) =
 export function CopilotCard({ card, last }: { card: Card; last: boolean }) {
   const cp = useCopilot();
   const period = useWorkspace((s) => s.period);
+  // where the custom logic sits in the code right now
+  const customLine = usePine((s) => lineOfVar(s.ran.split('\n'), 'dipped')) || 5;
   switch (card.kind) {
     case 'main': {
       const n = card.entry.length;
@@ -285,7 +289,7 @@ export function CopilotCard({ card, last }: { card: Card; last: boolean }) {
           title="Added to canvas"
           sub={card.phase === 'built' ? '1 custom block · exit when RSI drops below 50' : 'Simplified: RSI was below 40 on the previous candle'}
           footer={card.phase === 'built'
-            ? <AddedFooter note="Custom logic is line 5 in Pine Script" link="Open" onLink={() => cp.openLine(5)} onUndo={() => cp.undo(card.id)} />
+            ? <AddedFooter note={`Custom logic is line ${customLine} in Pine Script`} link="Open" onLink={() => cp.openLine(customLine)} onUndo={() => cp.undo(card.id)} />
             : <AddedFooter onUndo={() => cp.undo(card.id)} />}
         >
           <Section>ENTRY</Section>

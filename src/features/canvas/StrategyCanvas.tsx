@@ -20,6 +20,8 @@ import { findNode, findParent, fitsIn, flatConditions, heightOf, isInside, level
 import { useCanvas } from '@/store/canvas';
 import type { Condition, Group, Side, StrategyTree } from '@/types/strategy';
 import { useCopilot } from '@/store/copilot';
+import { memoryText, usePine } from '@/store/pine';
+import { CardAction, FitBadge, Secondary } from '@/features/copilot/parts';
 import { CopilotPreviewRows, DragCopy, TreeRow } from './CanvasTree';
 import { useDragState } from './dragState';
 import { FieldAtom } from './kit/atoms';
@@ -234,20 +236,30 @@ function CanvasSelectionBar({ ids }: { ids: string[] }) {
 
 /* ── Entry and Exit frames ─────────────────────────────────────── */
 
-/** Copilot built something the canvas can't draw: the strategy runs from Pine Script (design/copilot · Code only). */
+/**
+ * The code holds memory between candles (var, :=): one card replaces the blocks, and adding
+ * blocks by hand is off until the code fits again (design/pine-editor §5).
+ */
 function CodeOnlyCard() {
-  const { setView, checkOnChart } = useCopilot.getState();
+  const { openLine, checkOnChart } = useCopilot.getState();
+  const memory = usePine(memoryText);
+  const first = usePine((s) => s.memoryLines[0] ?? 1);
   return (
-    <div className="absolute top-16 left-1/2 flex w-[420px] -translate-x-1/2 flex-col gap-2.5 rounded-card border border-border-control bg-surface p-4 shadow-popover">
-      <span className="flex items-center gap-2">
-        <span className="text-title font-semibold">Runs from Pine Script</span>
-        <span className="inline-flex h-5 items-center rounded-[5px] bg-surface-selected px-1.5 text-[11px] font-semibold text-text-secondary">&lt;/&gt; Code only</span>
-      </span>
-      <p className="m-0 text-body text-text-secondary">This strategy uses memory between candles (lines 5, 8–12), which blocks can’t show. Edit it in code; the chart still shows every trade.</p>
-      <span className="flex gap-2">
-        <button type="button" onClick={() => setView('pine')} className="h-8 rounded-control border border-brand bg-surface px-3 text-label font-medium text-brand hover:bg-brand-tint">Open code</button>
-        <button type="button" onClick={checkOnChart} className="h-8 rounded-control px-3 text-label font-medium text-brand hover:bg-brand-tint">Check on chart</button>
-      </span>
+    <div className="absolute top-16 left-1/2 flex w-[420px] -translate-x-1/2 flex-col overflow-hidden rounded-card border border-border-control bg-surface shadow-surface">
+      <div className="flex items-center gap-2 px-3 py-2.5 text-body font-semibold">
+        <span aria-hidden="true" className="flex size-7 items-center justify-center rounded-[6px] bg-surface-selected font-mono text-label font-semibold text-text-secondary">&lt;/&gt;</span>
+        <span className="flex-1">Runs from Pine Script</span>
+        <FitBadge kind="code" />
+      </div>
+      <p className="m-0 px-3 pb-3 text-chip leading-[18px] text-text-secondary">
+        This strategy uses memory between candles{memory ? ` (line${memory.includes(',') || memory.includes('–') ? 's' : ''} ${memory})` : ''}, which blocks can’t show. Change it in Pine Script; the chart still shows every trade.
+      </p>
+      <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-2.5">
+        <CardAction onClick={() => openLine(first)}>Edit in code</CardAction>
+        <Secondary onClick={checkOnChart}>Check on chart</Secondary>
+        <span className="flex-1" />
+        <span className="text-label text-text-disabled" title="This strategy runs from code. Change it in Pine Script.">+ Add condition is off</span>
+      </div>
     </div>
   );
 }

@@ -135,6 +135,8 @@ interface CanvasState extends StrategyTree {
   /** Copilot's reviewed change, applied */
   copilotCommit: (t: StrategyTree, description: string, toast?: string) => void;
   showToast: (text: string, undo?: boolean, icon?: 'ai' | 'code') => void;
+  /** Run in the Pine Script editor: the canvas redraws to match the code, as one undo step */
+  fromCode: (t: StrategyTree, extra: Partial<CanvasState>, description: string) => void;
 }
 
 const treeOf = (s: StrategyTree): StrategyTree => ({ entry: s.entry, exit: s.exit });
@@ -199,6 +201,8 @@ export const useCanvas = create<CanvasState>((set, get) => {
     },
 
     addCondition: (side, parentId, index) => {
+      // a code-only strategy can't take blocks by hand (design/pine-editor §5)
+      if (get().codeOnly) return;
       const t = treeOf(get());
       const root = t[side];
       const parent = parentId ?? root.id;
@@ -390,6 +394,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       commit(next, description, { pending: null });
       if (toast) showToast(toast, true, 'ai');
     },
+    fromCode: (next, extra, description) => commit(next, description, { editor: null, selected: [], pending: null, ...extra }),
     showToast,
   };
 });
