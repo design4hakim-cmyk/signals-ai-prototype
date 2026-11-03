@@ -4,7 +4,7 @@ import { useCanvas } from '@/store/canvas';
 import { useCopilot } from '@/store/copilot';
 import { useStrategy } from '@/store/strategy';
 import { useShallow } from 'zustand/react/shallow';
-import { CardAction, SmallSecondary, Spark, StatusIcon } from './parts';
+import { CardAction, Secondary, Spark, StatusIcon } from './parts';
 
 /** Copilot's Pine Script view: sync bar, the code (changed lines marked), Discard / Apply. */
 export function PineView() {
@@ -25,7 +25,7 @@ export function PineView() {
         <div className="flex shrink-0 items-center gap-2 bg-ai-tint px-4 py-2 text-label">
           <Spark />
           <span className="grow">Copilot changed {changed.length} line{changed.length > 1 ? 's' : ''} · {pineNote}</span>
-          <SmallSecondary onClick={discardCode}>Undo</SmallSecondary>
+          <Secondary onClick={discardCode}>Undo</Secondary>
         </div>
       ) : (
         <div className="flex shrink-0 items-center gap-2 bg-success-bg px-4 py-2 text-label text-success">
@@ -51,7 +51,7 @@ export function PineView() {
         })}
       </div>
       <div className="flex shrink-0 items-center gap-2 border-t border-border-subtle px-4 py-2.5">
-        <SmallSecondary tertiary onClick={discardCode}>Discard changes</SmallSecondary>
+        <Secondary onClick={discardCode}>Discard changes</Secondary>
         <span className="grow" />
         <CardAction onClick={applyCode}>Apply to strategy</CardAction>
       </div>

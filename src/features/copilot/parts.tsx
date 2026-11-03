@@ -6,9 +6,9 @@ import type { ReactNode } from 'react';
 */
 
 /** ✦ — the 4-point star, Copilot's mark. */
-export const Spark = ({ size = 14 }: { size?: 12 | 14 | 16 }) => (
+export const Spark = ({ size = 14 }: { size?: 12 | 13 | 14 | 16 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" className="shrink-0 text-ai">
-    <path d="M12 2c.6 4.8 2.9 7.4 10 10-7.1 2.6-9.4 5.2-10 10-.6-4.8-2.9-7.4-10-10 7.1-2.6 9.4-5.2 10-10z" fill="currentColor" />
+    <path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z" fill="currentColor" />
   </svg>
 );
 
@@ -18,11 +18,11 @@ export const UserBubble = ({ children }: { children: ReactNode }) => (
 );
 
 export const ValueChip = ({ children }: { children: ReactNode }) => (
-  <span className="inline-flex h-[22px] items-center rounded-[5px] bg-surface-selected px-1.5 text-label font-medium">{children}</span>
+  <span className="inline-flex h-[22px] items-center whitespace-nowrap rounded-[5px] bg-surface-selected px-[7px] text-label font-medium text-text-primary">{children}</span>
 );
 
 export const ContextChip = ({ children }: { children: ReactNode }) => (
-  <span className="inline-flex h-6 items-center rounded-pill border border-border-control bg-surface px-2.5 text-hint hover:border-brand-border">{children}</span>
+  <span className="inline-flex h-6 items-center rounded-pill border border-border-control bg-surface px-[9px] text-hint text-text-secondary hover:border-brand-border">{children}</span>
 );
 
 /** Something Copilot decided itself: dashed. Click to change it. */
@@ -31,7 +31,8 @@ export const AssumedChip = ({ children, onClick }: { children: ReactNode; onClic
     type="button"
     onClick={onClick}
     title="Copilot chose this. Click to change."
-    className="inline-flex h-5 items-center rounded-pill border border-dashed border-border-dashed bg-surface px-2 text-[10.5px] text-text-secondary hover:border-brand-border"
+    // Plex, not mono: 10.5/400 and no letter-spacing, even inside a spaced-out section label
+    className="inline-flex h-5 items-center rounded-pill border border-dashed border-border-dashed bg-surface px-2 font-sans text-[10.5px] font-normal tracking-normal text-text-secondary hover:border-brand-border"
   >
     {children}
   </button>
@@ -98,15 +99,15 @@ export function SignalCounts({ entries, exits, beforeEntries }: { entries: numbe
         ▲ {beforeEntries !== undefined && beforeEntries !== entries && <><s className="font-normal text-text-subtle">{beforeEntries}</s> → </>}
         {entries} {entries === 1 ? 'entry' : 'entries'}
       </span>
-      {exits !== undefined && <span className="text-sell-text">▼ {exits} {exits === 1 ? 'exit' : 'exits'}</span>}
+      {exits !== undefined && <span className="text-error">▼ {exits} {exits === 1 ? 'exit' : 'exits'}</span>}
     </span>
   );
 }
 
 export function DiffMark({ kind }: { kind: 'added' | 'changed' | 'removed' }) {
-  const m = { added: ['+', 'bg-buy-tint text-buy-text'], changed: ['~', 'bg-brand-tint text-brand'], removed: ['−', 'bg-sell-tint text-sell-text'] }[kind];
+  const m = { added: ['+', 'bg-buy-tint text-buy-text'], changed: ['~', 'bg-brand-pressed-tint text-brand'], removed: ['−', 'bg-error-bg text-error'] }[kind];
   return (
-    <span aria-label={kind[0].toUpperCase() + kind.slice(1)} className={`flex size-[18px] shrink-0 items-center justify-center rounded-[5px] text-label font-bold ${m[1]}`}>
+    <span aria-label={kind[0].toUpperCase() + kind.slice(1)} className={`flex size-[18px] shrink-0 items-center justify-center rounded-[5px] text-body font-bold ${m[1]}`}>
       {m[0]}
     </span>
   );
@@ -114,29 +115,50 @@ export function DiffMark({ kind }: { kind: 'added' | 'changed' | 'removed' }) {
 
 export function FitBadge({ kind }: { kind: 'fits' | 'custom' | 'code' }) {
   const m = {
-    fits: ['Fits canvas', 'bg-buy-tint text-buy-strong'],
-    custom: ['</> Custom logic', 'bg-warn-tint text-warn-text'],
-    code: ['</> Code only', 'bg-surface-selected text-text-secondary'],
+    fits: { text: 'Fits canvas', cls: 'bg-buy-tint text-buy-strong', code: false },
+    custom: { text: 'Custom logic', cls: 'bg-warn-tint text-warn-text', code: true },
+    code: { text: 'Code only', cls: 'bg-surface-selected text-text-secondary', code: true },
   }[kind];
-  return <span className={`inline-flex h-5 shrink-0 items-center rounded-[5px] px-1.5 text-[11px] font-semibold ${m[1]}`}>{m[0]}</span>;
+  return (
+    <span className={`inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-[5px] px-[7px] text-[11px] font-semibold ${m.cls}`}>
+      {m.code && <CodeGlyph />} {m.text}
+    </span>
+  );
 }
+
+/** `</>`: the only thing in the UI set in JetBrains Mono. */
+export const CodeGlyph = () => <span aria-hidden="true" className="font-mono text-[11px] font-semibold">&lt;/&gt;</span>;
 
 /** Card actions are outlined blue: the page keeps its one filled-blue button. */
 export const CardAction = ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
   <button
     type="button"
     onClick={onClick}
-    className="h-[30px] shrink-0 rounded-control border border-brand bg-surface px-3 text-label font-medium text-brand outline-none hover:bg-brand-tint active:bg-brand-pressed-tint focus-visible:shadow-focus-ring"
+    className="h-[30px] shrink-0 rounded-chip border border-brand bg-surface px-3 text-body font-medium text-brand outline-none hover:bg-brand-tint active:bg-brand-pressed-tint focus-visible:shadow-focus-ring"
   >
     {children}
   </button>
 );
 
-export const SmallSecondary = ({ children, onClick, tertiary }: { children: ReactNode; onClick?: () => void; tertiary?: boolean }) => (
+/** Secondary: white with a grey edge. 30px in footers, 28px for Undo. */
+export const Secondary = ({ children, onClick, small, disabled, title }: { children: ReactNode; onClick?: () => void; small?: boolean; disabled?: boolean; title?: string }) => (
   <button
     type="button"
     onClick={onClick}
-    className={`h-7 shrink-0 rounded-control px-2.5 text-label outline-none focus-visible:shadow-focus-ring ${tertiary ? 'font-medium text-brand hover:bg-brand-tint' : 'border border-border-chip bg-surface hover:bg-surface-hover active:bg-row-pressed'}`}
+    disabled={disabled}
+    title={title}
+    className={`${small ? 'h-7' : 'h-[30px]'} shrink-0 rounded-chip border border-border-chip bg-surface px-3 text-body font-medium text-text-primary outline-none hover:bg-surface-hover active:bg-row-pressed focus-visible:shadow-focus-ring disabled:cursor-not-allowed disabled:border-disabled-border disabled:bg-disabled-bg disabled:text-text-disabled`}
+  >
+    {children}
+  </button>
+);
+
+/** Tertiary: a blue word, no edge. */
+export const Tertiary = ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="h-[30px] shrink-0 rounded-chip border border-transparent px-3 text-body font-medium text-brand outline-none hover:bg-brand-tint focus-visible:shadow-focus-ring"
   >
     {children}
   </button>

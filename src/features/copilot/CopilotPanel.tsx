@@ -7,7 +7,7 @@ import { useBacktest } from '@/store/backtest';
 import { useCopilot } from '@/store/copilot';
 import { useStrategy } from '@/store/strategy';
 import { CopilotCard, Thinking } from './Cards';
-import { SmallSecondary, Spark, UserBubble } from './parts';
+import { Secondary, Spark, UserBubble } from './parts';
 import { PineView } from './PineView';
 
 /** Right panel: Signals Copilot (design/copilot · Panel). 440px wide. */
@@ -166,7 +166,7 @@ export function CopilotPanel() {
               <MicIcon />
             </IconButton>
             {building && !canSend ? (
-              <SmallSecondary onClick={stop}>Stop</SmallSecondary>
+              <Secondary onClick={stop}>Stop</Secondary>
             ) : (
               <button
                 type="button"
