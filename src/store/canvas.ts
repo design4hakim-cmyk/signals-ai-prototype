@@ -65,6 +65,19 @@ export interface FramePos {
   y: number;
 }
 
+/** What Copilot is placing (design/copilot "On the canvas"): skeletons, then ghosts; a placeholder where a question is open. */
+export interface CopilotPreview {
+  side: Side;
+  rows: ({ kind: 'skeleton' } | { kind: 'ghost'; cond: Condition })[];
+  placeholder: Side | null;
+}
+
+/** A Copilot change to blocks you made, previewed until Apply: dashed blue = will change, dashed red = will be removed. */
+export interface PendingChange {
+  changes: Record<string, Condition>;
+  removals: string[];
+}
+
 interface CanvasToast {
   text: string;
   undo: boolean;
@@ -80,6 +93,12 @@ interface CanvasState extends StrategyTree {
   history: StrategyTree[];
   timing: Record<Side, Timing>;
   toast: CanvasToast | null;
+  copilotPreview: CopilotPreview | null;
+  pending: PendingChange | null;
+  /** the strategy runs from Pine Script: the canvas shows one card instead of blocks */
+  codeOnly: boolean;
+  /** the block a card row points at (and the other way round) */
+  linkedHover: string | null;
 
   load: (t: StrategyTree) => void;
   addCondition: (side: Side, parentId?: string, index?: number) => void;
@@ -109,6 +128,11 @@ interface CanvasState extends StrategyTree {
   moveFrame: (side: Side, pos: FramePos) => void;
   setView: (v: View) => void;
   set: (patch: Partial<CanvasState>) => void;
+  /** Copilot adds blocks (violet + ✦) at the end of a section; `changes: 0` while it builds one request */
+  copilotAdd: (side: Side, nodes: StrategyNode[], description: string, changes?: number) => void;
+  /** Copilot's reviewed change, applied */
+  copilotCommit: (t: StrategyTree, description: string, toast?: string) => void;
+  showToast: (text: string, undo?: boolean) => void;
 }
 
 const treeOf = (s: StrategyTree): StrategyTree => ({ entry: s.entry, exit: s.exit });
@@ -160,6 +184,10 @@ export const useCanvas = create<CanvasState>((set, get) => {
     frames: { entry: { x: 48, y: 32 }, exit: null },
     view: { x: 0, y: 0, zoom: 1 },
     history: [],
+    copilotPreview: null,
+    pending: null,
+    codeOnly: false,
+    linkedHover: null,
     timing: { entry: 'close', exit: 'close' },
     toast: null,
 
@@ -350,6 +378,17 @@ export const useCanvas = create<CanvasState>((set, get) => {
     moveFrame: (side, pos) => set((s) => ({ frames: { ...s.frames, [side]: pos } })),
     setView: (view) => set({ view }),
     set: (patch) => set(patch),
+
+    copilotAdd: (side, nodes, description, changes = 1) => {
+      const t = treeOf(get());
+      const mark = (n: StrategyNode): StrategyNode => (n.kind === 'cond' ? { ...n, copilot: true } : { ...n, children: n.children.map(mark) });
+      commit(insertAt(t, t[side].id, t[side].children.length, nodes.map(mark)), description, {}, changes);
+    },
+    copilotCommit: (next, description, toast) => {
+      commit(next, description, { pending: null });
+      if (toast) showToast(toast);
+    },
+    showToast,
   };
 });
 

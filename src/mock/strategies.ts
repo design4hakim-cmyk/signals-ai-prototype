@@ -7,12 +7,12 @@ import type { Condition, Group, IndicatorId, IndicatorParams, Logic, MathStep, O
   Each call makes fresh ids, so loading one twice never clashes.
 */
 
-const ind = (id: IndicatorId, params: IndicatorParams = {}, math?: MathStep): Operand => ({
+export const ind = (id: IndicatorId, params: IndicatorParams = {}, math?: MathStep): Operand => ({
   type: 'indicator', id, params: { ...indicatorDef(id).defaults, ...params }, ...(math ? { math } : {}),
 });
-const num = (value: number): Operand => ({ type: 'number', value });
-const cond = (left: Operand | null, relation: Relation | null, right: Operand | null): Condition => ({ kind: 'cond', id: uid('c'), left, relation, right });
-const group = (logic: Logic, children: StrategyNode[]): Group => ({ kind: 'group', id: uid('g'), logic, children });
+export const num = (value: number): Operand => ({ type: 'number', value });
+export const cond = (left: Operand | null, relation: Relation | null, right: Operand | null): Condition => ({ kind: 'cond', id: uid('c'), left, relation, right });
+export const group = (logic: Logic, children: StrategyNode[]): Group => ({ kind: 'group', id: uid('g'), logic, children });
 
 const emaCross = () => cond(ind('ema', { length: 9 }), 'Cross Above', ind('ema', { length: 21 }));
 const rsiAbove = () => cond(ind('rsi'), 'Greater Than', num(50));

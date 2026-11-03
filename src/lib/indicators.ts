@@ -25,6 +25,7 @@ export const INDICATORS: IndicatorDef[] = [
   { id: 'stoch', name: 'Stochastic Oscillator', short: 'Stochastic', category: 'Momentum', defaults: { k: 14, d: 3 } },
   { id: 'price', name: 'Price', short: 'Close', category: 'Trend', defaults: { source: 'Close' } },
   { id: 'volume', name: 'Volume', short: 'Volume', category: 'Volume', defaults: {} },
+  { id: 'vwap', name: 'Volume Weighted Average Price', short: 'VWAP', category: 'Volume', defaults: {} },
   { id: 'median', name: 'Median Average', short: 'Median', category: 'Trend', defaults: { length: 20, source: 'Close', offset: 0 } },
   { id: 'trimmed', name: 'Trimmed Mean', short: 'Trimmed Mean', category: 'Trend', defaults: { length: 20, source: 'Close', offset: 0 } },
   { id: 'geo', name: 'Geometric Mean', short: 'Geometric Mean', category: 'Trend', defaults: { length: 20, source: 'Close', offset: 0 } },
@@ -53,8 +54,10 @@ export function operandLabel(o: Operand): { name: string; args: string } {
       return { name: p.source ?? 'Close', args: '' };
     case 'volume':
       return { name: 'Volume', args: '' };
+    case 'vwap':
+      return { name: 'VWAP', args: '' };
     case 'rsi':
-      return { name: 'RSI', args: `(${p.length})` };
+      return { name: 'RSI', args: `(${p.length}${off})` };
     case 'stoch':
       return { name: 'Stochastic', args: `(${p.k}, ${p.d})` };
     case 'bb':
@@ -81,9 +84,10 @@ export function inputFields(id: IndicatorId): (keyof IndicatorParams)[] {
     case 'price':
       return ['source'];
     case 'volume':
+    case 'vwap':
       return [];
     case 'rsi':
-      return ['length', 'source'];
+      return ['length', 'source', 'offset'];
     case 'stoch':
       return ['k', 'd'];
     case 'bb':
@@ -142,6 +146,18 @@ function indicatorSeries(candles: Candle[], id: IndicatorId, p: IndicatorParams)
       return src;
     case 'volume':
       return sourceSeries(candles, 'Volume');
+    case 'vwap': {
+      // resets each day: Σ(typical price × volume) ÷ Σ volume
+      const vol = sourceSeries(candles, 'Volume');
+      let day = -1, pv = 0, vv = 0;
+      return candles.map((c, i) => {
+        const d = Math.floor(c.time / 86400);
+        if (d !== day) { day = d; pv = 0; vv = 0; }
+        pv += ((c.high + c.low + c.close) / 3) * vol[i];
+        vv += vol[i];
+        return pv / vv;
+      });
+    }
     case 'sma':
       return shift(rolling(src, n, mean), p.offset);
     case 'ema':
@@ -163,7 +179,7 @@ function indicatorSeries(candles: Candle[], id: IndicatorId, p: IndicatorParams)
       return mid.map((m, i) => m + k * (p.mult ?? 2) * sd[i]);
     }
     case 'rsi':
-      return rsi(src, n);
+      return shift(rsi(src, n), p.offset);
     case 'stoch': {
       const kLen = p.k ?? 14;
       const raw = candles.map((c, i) => {

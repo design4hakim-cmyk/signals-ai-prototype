@@ -12,7 +12,7 @@ export const uid = (p: string) => `${p}-${Date.now().toString(36)}-${++n}`;
 export const emptyGroup = (logic: Logic = 'AND'): Group => ({ kind: 'group', id: uid('g'), logic, children: [] });
 export const blankCondition = (): Condition => ({ kind: 'cond', id: uid('c'), left: null, relation: null, right: null });
 
-export const isComplete = (c: Condition) => !!(c.left && c.relation && c.right);
+export const isComplete = (c: Condition) => !!c.custom || !!(c.left && c.relation && c.right);
 
 /** Every condition in reading order (top to bottom, into groups). */
 export function flatConditions(g: Group): Condition[] {
@@ -174,7 +174,7 @@ export function ungroup(t: StrategyTree, groupId: string): StrategyTree {
 
 /** "RSI (14) Greater Than 50", or with a separator: "RSI (14) · Greater Than · 50" */
 export const describeCondition = (c: Condition, sep = ' ') =>
-  [operandText(c.left), c.relation ?? '…', operandText(c.right)].join(sep);
+  c.custom ? c.custom.text : [operandText(c.left), c.relation ?? '…', operandText(c.right)].join(sep);
 
 export const logicName = (l: Logic) => (l === 'OR' ? 'Any of' : l === 'NONE' ? 'None of' : 'All of');
 export const sideName = (s: Side) => (s === 'entry' ? 'Entry' : 'Exit');

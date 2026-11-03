@@ -1,22 +1,90 @@
 import type { CopilotStarter } from '@/types/market';
+import type { Condition } from '@/types/strategy';
+import { cond, ind, num } from './strategies';
 
-// Starter prompts shown in the Copilot empty state (from board ST-Main)
+/*
+  Scripted Copilot (design/copilot · Mock data). No real AI:
+  the prompt is matched by keywords to one of these replies.
+*/
+
+// Starter prompts in the empty state (copy from the CP boards)
 export const copilotStarters: CopilotStarter[] = [
-  {
-    id: 'sma-cross',
-    title: 'Simple Moving Average Crossover',
-    description: 'Buy when fast MA crosses above slow MA.',
-  },
-  {
-    id: 'macd-cross',
-    title: 'MACD Signal Crossover',
-    description: 'Enter on MACD crossover with confirmation.',
-  },
-  {
-    id: 'ma-macd',
-    title: 'MA + MACD Confirmation',
-    description: 'Enter on MA crossover confirmed by MACD.',
-  },
+  { id: 'sma-cross', title: 'Simple Moving Average Crossover', description: 'Buy when the fast MA crosses above the slow MA.' },
+  { id: 'macd-cross', title: 'MACD Signal Crossover', description: 'Enter on a MACD crossover with confirmation.' },
+  { id: 'ma-macd', title: 'MA + MACD Confirmation', description: 'Enter on an MA crossover confirmed by MACD.' },
 ];
 
 export const mockUser = { firstName: 'Hakim' };
+
+export type ScriptId = 'why' | 'main' | 'refineAdd' | 'review' | 'partlyFits' | 'codeOnly' | 'failed' | 'vague';
+
+/** Which scripted reply a prompt gets. */
+export function matchScript(text: string): { id: ScriptId; entry?: () => Condition[] } {
+  const t = text.toLowerCase();
+  if (/profitab|make me money|best strategy|guaranteed/.test(t)) return { id: 'vague' };
+  if (/why no trade|why didn.t/.test(t)) return { id: 'why' };
+  if (/at least once in the last/.test(t)) return { id: 'partlyFits' };
+  if (/re-?arm/.test(t)) return { id: 'codeOnly' };
+  if (/vwap/.test(t) && /3:15|15:15/.test(t)) return { id: 'failed' };
+  if (/stricter|fewer signals|drop the|remove the/.test(t)) return { id: 'review' };
+  if (/volume/.test(t) && /average|above|filter/.test(t)) return { id: 'refineAdd' };
+  if (/macd/.test(t)) return { id: 'main', entry: macdEntry };
+  if (/moving average|\bma\b|\bsma\b/.test(t) && !/ema/.test(t)) return { id: 'main', entry: smaEntry };
+  if (/breakout|bollinger/.test(t)) return { id: 'main', entry: breakoutEntry };
+  if (/dip|rsi below 30|oversold/.test(t)) return { id: 'main', entry: dipEntry };
+  if (/ema|rsi|cross|trend/.test(t)) return { id: 'main', entry: mainEntry };
+  return { id: 'vague' };
+}
+
+/* ── Entries each script builds ────────────────────────────────── */
+
+export const mainEntry = () => [
+  cond(ind('ema', { length: 9 }), 'Cross Above', ind('ema', { length: 21 })),
+  cond(ind('rsi'), 'Greater Than', num(50)),
+];
+const smaEntry = () => [cond(ind('sma', { length: 9 }), 'Cross Above', ind('sma', { length: 21 }))];
+// MACD isn't a canvas indicator: its line crossing is the EMA 12 / EMA 26 cross
+const macdEntry = () => [cond(ind('ema', { length: 12 }), 'Cross Above', ind('ema', { length: 26 }))];
+const breakoutEntry = () => [
+  cond(ind('price'), 'Cross Above', ind('bb', { band: 'Upper' })),
+  cond(ind('volume'), 'Greater Than', ind('sma', { length: 20, source: 'Volume' }, { op: '×', value: 1.5 })),
+];
+const dipEntry = () => [cond(ind('rsi'), 'Cross Above', num(30))];
+
+export const mainExit = () => cond(ind('ema', { length: 9 }), 'Cross Below', ind('ema', { length: 21 }));
+export const volumeFilter = () => cond(ind('volume'), 'Greater Than', ind('sma', { length: 20, source: 'Volume' }));
+
+export const EXIT_OPTIONS = [
+  { label: 'EMA 9 crosses below EMA 21', suggested: true },
+  { label: 'At a fixed time, 15:15' },
+  { label: "I'll set it on the canvas" },
+];
+
+export const VAGUE_OPTIONS = [
+  { label: 'Follow the trend', hint: 'EMA 9 crosses EMA 21, filtered by RSI', entry: mainEntry },
+  { label: 'Catch breakouts', hint: 'Close above Bollinger upper band with high volume', entry: breakoutEntry },
+  { label: 'Buy the dip', hint: 'RSI below 30, then turns back up', entry: dipEntry },
+];
+
+/* Partly fits: build anyway / simplify */
+export const partlyFitsEntry = (line: number) => [
+  cond(ind('rsi'), 'Cross Above', num(60)),
+  { ...cond(null, null, null), custom: { text: 'RSI was below 40 in the last 10 candles', line } },
+];
+export const simplifiedEntry = () => [cond(ind('rsi'), 'Cross Above', num(60)), cond(ind('rsi', { offset: 1 }), 'Less Than', num(40))];
+export const rsiExit = () => cond(ind('rsi'), 'Less Than', num(50));
+
+/* Build failed, partly: the entry goes on, the 15:15 time exit doesn't */
+export const vwapEntry = () => [
+  cond(ind('price'), 'Greater Than', ind('vwap')),
+  cond(ind('rsi'), 'Cross Above', num(60)),
+  cond(ind('price'), 'Cross Above', ind('bb', { band: 'Upper' })),
+];
+
+/** Follow-ups after a strategy is ready. */
+export const NEXT_STEPS = ['Looks right · Run backtest', 'Fewer signals, please', 'Why no trade on 15 Mar?'];
+
+export const WHY_ANSWER = 'On 15 Mar, EMA 9 stayed below EMA 21 all day, so the entry never fired. Check on chart to see that day.';
+
+/** Fake timing (ms). */
+export const TIMING = { understood: 600, place: 500 };

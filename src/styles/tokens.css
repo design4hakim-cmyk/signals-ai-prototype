@@ -106,6 +106,7 @@
   --color-readonly-bg: #fafbfc;
   --color-disabled-bg: #f7f8fa;
   --color-disabled-border: #ececef;
+  --color-error-card: #e5a3a0; /* Copilot error card edge */
   --color-error: #b42318; /* with an icon and a message, always */
   --color-error-bg: #fdf4f4;
   --color-error-pressed: #fbeceb;
@@ -149,14 +150,15 @@
   --color-text-disabled: #a1a6ad;
   --color-row-hover: #f4f5f7;
 
-  /* ── Copilot / AI. Uses the brand blue family — NO purple (Hakim, 31 Oct).
-        The canvas boards still show purple; code overrides it. */
-  --color-ai: #0782da; /* ✦ icon, accents (= brand) */
-  --color-ai-text: #0a5fa3; /* text on blue tint (= brand-text) */
-  --color-ai-tint: #f4f8fd; /* chips like "Sees your canvas" (= brand-tint) */
-  --color-ai-badge: #eaf4fc; /* ✦ badge on AI-made blocks */
-  --color-ai-border: #c4dff5; /* Copilot input */
-  --color-ai-border-soft: #b5d6f2; /* badge border, dashed Copilot cards */
+  /* ── Copilot / AI: violet = made by Copilot, nothing else (design/copilot, 2 Nov rule).
+        Only on the ✦ mark, Copilot-made blocks, ghosts and changed code lines —
+        never on the input, progress, spinners, buttons, focus or hover (those are blue). */
+  --color-ai: #6e56cf; /* ✦ mark, highlighted-code bar */
+  --color-ai-text: #5b45b8; /* violet words, e.g. "Waiting for your answer in Copilot" */
+  --color-ai-tint: #efeaff; /* Copilot-made block fill, changed code lines */
+  --color-ai-badge: #efeaff; /* ✦ badge fill */
+  --color-ai-border: #b9a8f7; /* Copilot-made block edge, ghost dashed edge */
+  --color-ai-border-soft: #d6cbfa; /* ✦ badge border */
 
   /* ── Typography */
   --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
@@ -206,7 +208,7 @@
   --spacing-contextbar: 54px;
   --spacing-bottompanel: 340px; /* chart panel height (above the bar) */
   --spacing-bottombar: 52px;
-  --spacing-copilot: 420px;
+  --spacing-copilot: 440px;
   --spacing-control: 36px; /* default button height */
   --spacing-control-sm: 32px; /* dropdowns */
   --spacing-control-xs: 28px;

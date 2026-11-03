@@ -3,7 +3,7 @@
 // and smaller groups, joined by All of (AND), Any of (OR) or None of (NONE).
 // Groups go at most 2 levels deep (design/canvas-builder/COMPONENTS.md §6).
 
-export type IndicatorId = 'price' | 'volume' | 'sma' | 'ema' | 'wma' | 'median' | 'trimmed' | 'geo' | 'harmonic' | 'bb' | 'rsi' | 'stoch';
+export type IndicatorId = 'price' | 'volume' | 'vwap' | 'sma' | 'ema' | 'wma' | 'median' | 'trimmed' | 'geo' | 'harmonic' | 'bb' | 'rsi' | 'stoch';
 export type Source = 'Close' | 'Open' | 'High' | 'Low' | 'Volume';
 export type Band = 'Upper' | 'Middle' | 'Lower';
 
@@ -48,6 +48,8 @@ export interface Condition {
   right: Operand | null;
   /** added or changed by Copilot: ✦ + violet until the user edits it */
   copilot?: boolean;
+  /** custom logic the canvas can't draw: runs on Pine Script code (design/copilot "Custom logic block") */
+  custom?: { text: string; line: number };
 }
 
 export type Logic = 'AND' | 'OR' | 'NONE';

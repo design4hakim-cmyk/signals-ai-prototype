@@ -29,7 +29,8 @@ export interface SignalResult {
 
 /** Is the condition true on candle i? Half-built conditions never count. */
 function conditionAt(c: Condition, i: number, series: (o: Operand) => number[]) {
-  if (!c.left || !c.relation || !c.right) return null;
+  // custom logic runs on code; half-built conditions never count
+  if (c.custom || !c.left || !c.relation || !c.right) return null;
   const a = series(c.left);
   const b = series(c.right);
   const [x, y, px, py] = [a[i], b[i], a[i - 1], b[i - 1]];
