@@ -28,7 +28,7 @@ Canvas artifact **"Signals AI · All flows"**: https://claude.ai/artifact/6vqCnc
 - Boards can be 100–150 KB. Don't read them raw: save the HTML, then run `python3 -I scripts/board-outline.py <file.html>` to get text + key styles. List the unique text first; it contains the designer's annotations.
 
 ## Non-negotiable design rules
-- **Brand blue `#0782DA`.** Violet is reserved for **Copilot provenance only** (✦ badge + violet on things Copilot added or changed), never for hover, focus or decoration (decided 2 Nov after the design-system review; this replaces the earlier "no purple" rule). Update `--color-ai-*` in `tokens.css` to the violet set in `design/canvas-builder/atom-states.ts` when you next touch Copilot UI.
+- **Brand blue `#0782DA`.** Violet is reserved for **Copilot provenance only** (✦ badge + violet on things Copilot added or changed), never for hover, focus or decoration (decided 2 Nov after the design-system review; this replaces the earlier "no purple" rule). `--color-ai-*` in `tokens.css` is the violet set.
 - **One filled-blue button on screen at a time.** Secondary = outlined blue. Navigation = segmented control (never filled blue).
 - BUY = green, SELL = red. Used only on numbers, markers and position chips.
 - Plain language in UI copy. Same components everywhere.
@@ -56,13 +56,13 @@ src/
     bottom-bar/            K11–K12 (chart/signals tabs, update chart, log, limits)
     chart/PriceChart.tsx   Lightweight Charts wrapper (+ entry/exit markers)
     backtest/              SetupBlock-Unified sheet; results/ = the full results page (design/backtest-results), grown from ResultsPanel
-    copilot/               Copilot panel
+    copilot/               Copilot panel (design/copilot): parts (atoms), Cards (the one AI card, every state), PineView, CopilotPanel
     strategies/            My Strategies panel (design/strategies-panel): parts, rows, menus, StrategiesPanel; stories in strategies/stories
     trade/                 the one Trade popup (top nav Trade, panel Trade, ⋯ → Trade…). Placeholder until phase 7
     scenarios/             ◐ Scenarios switcher. PROTOTYPE ONLY review helper
-  store/                   Zustand stores: canvas (conditions, selection, undo, camera), library (saved strategies, panel), workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups), results (how the results page is viewed: VIX filter, sort, Monte Carlo)
+  store/                   Zustand stores: canvas (conditions, selection, undo, camera), library (saved strategies, panel), workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups), results (how the results page is viewed: VIX filter, sort, Monte Carlo), copilot (scripted chat: cards change state in place; previews and pending changes live in canvas)
   mock/                    dummy data: seeded candles, instruments, example + saved strategies, Copilot starters
-  lib/                     pure logic: indicators, conditions (tree edits, 2-level depth, dissolve), signals (evaluates the tree + limits), describeChartData, backtestData (results maths from mock-results.json)
+  lib/                     pure logic: indicators, conditions (tree edits, 2-level depth, dissolve), signals (evaluates the tree + limits), describeChartData, backtestData (results maths from mock-results.json), pine (Pine Script written from the canvas)
 ```
 
 ## Behaviour already decided (keep consistent)
@@ -98,7 +98,7 @@ npx oxlint src         # lint
 - ✅ 1 · Context bar (K01–K10)
 - ✅ 1.5 · Top nav, bottom bar, backtest setup block (component sheets)
 - ✅ 2 · Canvas builder by hand: build from `design/canvas-builder/COMPONENTS.md` (atoms, blocks, All of / Any of / None of groups, checkbox selection, menus, drag with dnd-kit). B02–B08 and E01–E09 show the flow; the kit wins where they differ.
-- ⬜ 3 · Copilot flow: build from `design/copilot/COMPONENTS.md` (understood → question → building → applied; refine and sync; edge cases). CP-* boards keep the copy; the kit wins where they differ.
+- ✅ 3 · Copilot flow: build from `design/copilot/COMPONENTS.md` (understood → question → building → applied; refine and sync; edge cases). CP-* boards keep the copy; the kit wins where they differ.
 - ⬜ 4 · Pine Script panel (PN-*: errors fixed in place)
 - ⬜ 5 · Update chart flow polish (U01–U06)
 - ⬜ 6 · Backtest screens (BT-*) + saved setups as tabs. Results area: build from `design/backtest-results/COMPONENTS.md`.

@@ -3,6 +3,7 @@ import { flatConditions } from '@/lib/conditions';
 import { complexStrategy, demoStrategy, editingStrategy, groupedStrategy, halfBuiltStrategy } from '@/mock/strategies';
 import { SAVED_LIBRARY, useBacktest } from '@/store/backtest';
 import { useCanvas, type EditorPart } from '@/store/canvas';
+import { useCopilot } from '@/store/copilot';
 import { useLibrary } from '@/store/library';
 import { ALL_TRADES, monteCarlo, MONTE_CARLO } from '@/lib/backtestData';
 import { useResultsView } from '@/store/results';
@@ -24,6 +25,7 @@ const resetAll = () => {
   useCanvas.setState(useCanvas.getInitialState(), true);
   useLibrary.setState(useLibrary.getInitialState(), true);
   useResultsView.getState().reset();
+  useCopilot.getState().newChat();
 };
 const L = () => useLibrary.getState();
 const S = () => useStrategy.getState();
@@ -49,6 +51,12 @@ const savedWithResults = () => {
   B().addSaved(SAVED_LIBRARY.slice(0, 3).map((s) => s.id));
   B().seedResults();
 };
+
+/* Copilot: scripted prompts (mock/copilot.ts), run as if typed */
+const P = () => useCopilot.getState();
+const MAIN = 'Buy when EMA 9 crosses above EMA 21 and RSI is above 50';
+const after = (ms: number, f: () => void) => setTimeout(f, ms);
+const lastCard = () => [...P().messages].reverse().find((m) => m.kind === 'card')?.id ?? '';
 
 const FWD = [
   { id: 'f1', setup: 'Iron Condor', pnl: 4250, status: 'Running' as const },
@@ -98,6 +106,25 @@ const GROUPS: { title: string; items: [string, () => void][] }[] = [
       ['18 · Half built: red field, update blocked', () => { withStrategy(); C().addCondition('entry'); const id = nth('entry', 3); C().setOperand(id, 'left', { type: 'indicator', id: 'price', params: { source: 'Close' } }); C().setRelation(id, 'Cross Above'); C().closeEditor(); }],
       ['19 · Big strategy, zoomed out to 50%', () => { withStrategy(complexStrategy()); C().setView({ x: 0, y: 0, zoom: 0.5 }); }],
       ['20 · Entry section selected (drag title / arrows)', () => { withStrategy(); C().selectFrame('entry'); }],
+    ],
+  },
+  {
+    title: 'Copilot (design/copilot)',
+    items: [
+      ['C1 · Empty, starters', () => resetAll()],
+      ['C2 · Understood + exit question (skeletons)', () => { resetAll(); P().send(MAIN); }],
+      ['C3 · Strategy ready + next steps', () => { resetAll(); P().send(MAIN); P().answer(lastCard(), 0); }],
+      ['C4 · Stopped while building', () => { resetAll(); P().send(MAIN); after(1500, () => P().stop()); }],
+      ['C5 · Refine · add (applies at once)', () => { withStrategy(); P().send('Only take trades when volume is above its 20 average'); }],
+      ['C6 · Refine · review before changing your blocks', () => { withStrategy(); P().send('Only take trades when volume is above its 20 average'); after(900, () => P().send('Make RSI stricter and drop the volume filter')); }],
+      ['C7 · Pine Script · in sync', () => { withStrategy(); P().setView('pine'); }],
+      ['C8 · Pine Script · Copilot changed lines', () => { withStrategy(); P().send('Only take trades when volume is above its 20 average'); after(900, () => P().setView('pine')); }],
+      ['C9 · Partly fits · fit check', () => { resetAll(); P().send('Enter when RSI crosses above 60 and RSI was below 40 at least once in the last 10 candles'); }],
+      ['C10 · Partly fits · custom logic block', () => { resetAll(); P().send('Enter when RSI crosses above 60 and RSI was below 40 at least once in the last 10 candles'); after(900, () => P().buildAnyway(lastCard())); }],
+      ['C11 · Code only', () => { resetAll(); P().send('Buy when RSI crosses 70 but re-arm only after it drops below 40'); }],
+      ['C12 · Build failed, partly', () => { resetAll(); P().send('Buy above VWAP when RSI crosses 60 and price breaks the upper band, exit at 3:15'); }],
+      ['C13 · Vague idea → options', () => { resetAll(); P().send('Make me a profitable strategy'); }],
+      ['C14 · Voice · listening', () => { resetAll(); P().set({ listening: true }); }],
     ],
   },
   {
