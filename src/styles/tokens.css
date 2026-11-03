@@ -95,6 +95,31 @@
   --color-warn-tint: #fff7e6;
   --color-warn-dot: #e5a000;
 
+  /* ── My Strategies panel (design/strategies-panel/COMPONENTS.md).
+        Names shared with the canvas builder kit use the same values. */
+  --color-menu-current: #eef5fc; /* open-in-builder row, FT chip */
+  --color-brand-pressed-tint: #e6f3fb; /* Trade pressed, ⋯ open */
+  --color-row-pressed: #e9ebee; /* rows pressed */
+  --color-error: #b42318;
+  --color-error-bg: #fdf4f4;
+  --color-error-pressed: #fbeceb;
+  --color-success: #2f8a4e; /* Live chip text + dot */
+  --color-success-bg: #eaf6ee; /* Live chip */
+  --color-index-card: #f7f8fa; /* expanded index */
+  /* Index letter tiles (fallback when an instrument has no logo) */
+  --color-tile-nifty-bg: #e8eefc;
+  --color-tile-nifty: #2f4fb8;
+  --color-tile-sensex-bg: #e6eefb;
+  --color-tile-sensex: #2b5fb0;
+  --color-tile-eth-bg: #1d1f24;
+  --color-tile-eth: #ffffff;
+  --color-tile-btc-bg: #fdeedd;
+  --color-tile-btc: #b45309;
+  --color-tile-groww-bg: #e3f5ee;
+  --color-tile-groww: #1c7a5a;
+  --color-tile-asianpaint-bg: #fde8ea;
+  --color-tile-asianpaint: #b4232f;
+
   /* ── Misc greys from the component sheets */
   --color-text-disabled: #a1a6ad;
   --color-row-hover: #f4f5f7;
@@ -144,6 +169,10 @@
   --shadow-menu: 0 16px 40px rgba(20, 22, 28, 0.14); /* dropdown menus */
   --shadow-dialog: 0 20px 50px rgba(20, 22, 28, 0.16); /* chart data dialog */
   --shadow-popover: 0 8px 24px rgba(16, 24, 40, 0.12); /* ⋯ menus, trade lists, limit panels */
+  --shadow-surface: 0 12px 32px rgba(20, 22, 28, 0.14); /* canvas popovers, selection bar, toast */
+  --shadow-peek: 16px 0 40px rgba(20, 22, 28, 0.16); /* My Strategies floating over the builder */
+  --shadow-focus-ring: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-brand); /* keyboard focus, outside */
+  --shadow-focus-inset: inset 0 0 0 2px var(--color-brand); /* keyboard focus on rows, follows the radius */
 
   /* ── Layout sizes (fixed parts of the workspace) */
   --spacing-topbar: 56px;

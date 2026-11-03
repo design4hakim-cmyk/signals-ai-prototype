@@ -54,8 +54,10 @@ src/
     chart/PriceChart.tsx   Lightweight Charts wrapper (+ entry/exit markers)
     backtest/              SetupBlock-Unified sheet
     copilot/               Copilot panel
+    strategies/            My Strategies panel (design/strategies-panel): parts, rows, menus, StrategiesPanel; stories in strategies/stories
+    trade/                 the one Trade popup (top nav Trade, panel Trade, ⋯ → Trade…). Placeholder until phase 7
     scenarios/             ◐ Scenarios switcher. PROTOTYPE ONLY review helper
-  store/                   Zustand stores: workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups)
+  store/                   Zustand stores: library (saved strategies, panel), workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups)
   mock/                    dummy data: seeded candles, instruments, Copilot starters
   lib/                     pure logic: signals (EMA 9×21 + limits), describeChartData
 ```
@@ -84,6 +86,7 @@ npm install            # once, and after adding libraries
 npm run dev            # app at http://localhost:5173 (live reload)
 npm run build          # type-check + production build
 npm run storybook      # components at http://localhost:6006
+                       # (also published with every Vercel preview at <preview-url>/storybook/)
 npx oxlint src         # lint
 ```
 
@@ -97,4 +100,4 @@ npx oxlint src         # lint
 - ⬜ 5 · Update chart flow polish (U01–U06)
 - ⬜ 6 · Backtest screens (BT-*) + saved setups as tabs. Results area: build from `design/backtest-results/COMPONENTS.md`.
 - ⬜ 7 · Go live safely (ST-S14–S22: forward test first, then live)
-- ⬜ 8 · My Strategies panel: build from `design/strategies-panel/COMPONENTS.md` (ST-S03–S12 show the flow; the kit wins where they differ)
+- ✅ 8 · My Strategies panel: build from `design/strategies-panel/COMPONENTS.md` (ST-S03–S12 show the flow; the kit wins where they differ)
