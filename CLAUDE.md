@@ -57,12 +57,13 @@ src/
     bottom-bar/            K11–K12 (chart/signals tabs, update chart, log, limits)
     chart/PriceChart.tsx   Lightweight Charts wrapper (+ entry/exit markers)
     backtest/              SetupBlock-Unified sheet; results/ = the full results page (design/backtest-results), grown from ResultsPanel
-    copilot/               Copilot panel (design/copilot): parts (atoms), Cards (the one AI card, every state), PineView, CopilotPanel
+    copilot/               Copilot panel (design/copilot): parts (atoms), Cards (the one AI card, every state), History (chat history),
+                           Remembers (strategy notes), CopilotPanel, PineView (the Pine Script editor) + pine/ (CodeMirror editor, language)
     strategies/            My Strategies panel (design/strategies-panel): parts, rows, menus, StrategiesPanel; stories in strategies/stories
     trade/                 the one Trade popup (top nav Trade, panel Trade, ⋯ → Trade…). Placeholder until phase 7
-  store/                   Zustand stores: canvas (conditions, selection, undo, camera), library (saved strategies, panel), workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups), results (how the results page is viewed: VIX filter, sort, Monte Carlo), copilot (scripted chat: cards change state in place; previews and pending changes live in canvas)
-  mock/                    dummy data: seeded candles, instruments, example + saved strategies, Copilot starters
-  lib/                     pure logic: indicators, conditions (tree edits, 2-level depth, dissolve), signals (evaluates the tree + limits), describeChartData, backtestData (results maths from mock-results.json), pine (Pine Script written from the canvas)
+  store/                   Zustand stores: canvas (conditions, selection, undo, camera), library (saved strategies, panel), workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups), results (how the results page is viewed: VIX filter, sort, Monte Carlo), copilot (scripted chat; chats per strategy, notes; previews and pending changes live in canvas), pine (draft vs last run, status, AI fixes, drafts per strategy)
+  mock/                    dummy data: seeded candles, instruments, example + saved strategies, Copilot starters, chats (seeded Copilot chats + notes), pine (demo scripts for ⋯ → Load example)
+  lib/                     pure logic: indicators, conditions (tree edits, 2-level depth, dissolve), signals (evaluates the tree + limits), describeChartData, backtestData (results maths from mock-results.json), pine (canvas → code), pineParse (code → canvas, problems), pineMap (source map, id reconcile), lineDiff (patching, merge). `npm test` runs the round-trip tests
 ```
 
 ## Behaviour already decided (keep consistent)
@@ -99,7 +100,7 @@ npx oxlint src         # lint
 - ✅ 1.5 · Top nav, bottom bar, backtest setup block (component sheets)
 - ✅ 2 · Canvas builder by hand: build from `design/canvas-builder/COMPONENTS.md` (atoms, blocks, All of / Any of / None of groups, checkbox selection, menus, drag with dnd-kit). B02–B08 and E01–E09 show the flow; the kit wins where they differ.
 - ✅ 3 · Copilot flow: build from `design/copilot/COMPONENTS.md` (understood → question → building → applied; refine and sync; edge cases). CP-* boards keep the copy; the kit wins where they differ.
-- ⬜ 4 · Pine Script editor: build from `design/pine-editor/COMPONENTS.md` (real code editor, two-way sync with the canvas, session Discard, errors fixed in place with AI, code the canvas can't draw). First apply `design/copilot/FIXES.md`.
+- ✅ 4 · Pine Script editor: build from `design/pine-editor/COMPONENTS.md` (real code editor, two-way sync with the canvas, session Discard, errors fixed in place with AI, code the canvas can't draw). First apply `design/copilot/FIXES.md`.
 - ⬜ 5 · Update chart flow polish (U01–U06)
 - ⬜ 6 · Backtest screens (BT-*) + saved setups as tabs. Results area: build from `design/backtest-results/COMPONENTS.md`.
 - ⬜ 7 · Go live safely (ST-S14–S22: forward test first, then live)
