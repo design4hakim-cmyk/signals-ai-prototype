@@ -1,6 +1,7 @@
 import { CollapseIcon, ExpandIcon } from '@/components/ui/icons';
 import { longLabel } from '@/lib/describeChartData';
 import { PriceChart } from '@/features/chart/PriceChart';
+import { useUnfinished } from '@/store/canvas';
 import { useStrategy } from '@/store/strategy';
 import { useWorkspace } from '@/store/workspace';
 import { LimitsGroup } from './LimitPanel';
@@ -22,7 +23,8 @@ export function BottomPanel() {
   const { candles, signals, applied } = useAppliedChart();
   const { bottomTab, panelOpen, pendingChanges, chartStatus, togglePanel } = useWorkspace();
   const entry = useStrategy((s) => s.entry);
-  const paused = pendingChanges > 0 || chartStatus === 'error' || (entry === 'partial' && chartStatus !== 'updating');
+  const unfinished = useUnfinished();
+  const paused = pendingChanges > 0 || chartStatus === 'error' || (!!unfinished && chartStatus !== 'updating');
   const caption = `${longLabel(applied.chartData, applied.instrument)} · ${applied.timeframe} · ${applied.period}`;
 
   return (
@@ -132,7 +134,7 @@ function Tabs() {
 function UpdateChart() {
   const { signals } = useAppliedChart();
   const { pendingChanges, chartStatus, updateChart } = useWorkspace();
-  const entry = useStrategy((s) => s.entry);
+  const unfinished = useUnfinished();
   const counts = { entries: signals?.entries ?? 0, exits: signals?.exits ?? 0 };
 
   if (chartStatus === 'updating')
@@ -151,11 +153,17 @@ function UpdateChart() {
         </button>
       </span>
     );
-  if (entry === 'partial')
+  // A half-built condition blocks the update (U02)
+  if (unfinished)
     return (
-      <button type="button" disabled className="h-8 cursor-not-allowed rounded-control border border-border-control bg-surface px-3 text-body text-text-disabled">
-        Finish condition 3 first
-      </button>
+      <span className="flex items-center gap-2.5">
+        <button type="button" disabled className="h-[34px] cursor-not-allowed rounded-control bg-surface-disabled px-3.5 text-body font-medium text-text-disabled">
+          Update chart
+        </button>
+        <span className="text-label text-text-tertiary">
+          Finish {unfinished.side === 'exit' ? 'exit ' : ''}condition {unfinished.number} first
+        </span>
+      </span>
     );
   if (pendingChanges === 0) return null;
   return (

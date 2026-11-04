@@ -95,18 +95,70 @@
   --color-warn-tint: #fff7e6;
   --color-warn-dot: #e5a000;
 
+  /* ── Canvas builder kit (design/canvas-builder/COMPONENTS.md, atom-states.ts)
+        Editor layer = blue only: --color-brand + --color-brand-border (#9cc8ee). */
+  --color-menu-current: #eef5fc; /* current row in a menu (with ✓) */
+  --color-brand-pressed-tint: #e6f3fb; /* tertiary pressed, ⋯ open, ⋮⋮ dragging */
+  --color-row-pressed: #e9ebee; /* menu row / ⋯ pressed */
+  --color-border-dashed: #b3b8bf; /* empty atom, drag source */
+  --color-group-edge: #c3c8cf; /* dashed All of / Any of / None of box */
+  --color-group-bg: #fcfcfd;
+  --color-readonly-bg: #fafbfc;
+  --color-disabled-bg: #f7f8fa;
+  --color-disabled-border: #ececef;
+  --color-error-card: #e5a3a0; /* Copilot error card edge */
+  --color-error: #b42318; /* with an icon and a message, always */
+  --color-error-bg: #fdf4f4;
+  --color-error-pressed: #fbeceb;
+  --color-success: #2f8a4e;
+  --color-success-bg: #eaf6ee;
+  --color-star: #f0b429; /* ★ favourite indicator */
+  /* Copilot provenance ONLY (✦ + violet on things Copilot added). Never hover or focus. */
+  --color-copilot: #6e56cf;
+  --color-copilot-border: #b9a8f7;
+  --color-copilot-bg: #efeaff;
+  --color-copilot-soft: #d6cbfa;
+  /* ── My Strategies panel (design/strategies-panel/COMPONENTS.md).
+        Names shared with the canvas builder kit use the same values. */
+  --color-index-card: #f7f8fa; /* expanded index */
+  /* Index letter tiles (fallback when an instrument has no logo) */
+  --color-tile-nifty-bg: #e8eefc;
+  --color-tile-nifty: #2f4fb8;
+  --color-tile-sensex-bg: #e6eefb;
+  --color-tile-sensex: #2b5fb0;
+  --color-tile-eth-bg: #1d1f24;
+  --color-tile-eth: #ffffff;
+  --color-tile-btc-bg: #fdeedd;
+  --color-tile-btc: #b45309;
+  --color-tile-groww-bg: #e3f5ee;
+  --color-tile-groww: #1c7a5a;
+  --color-tile-asianpaint-bg: #fde8ea;
+  --color-tile-asianpaint: #b4232f;
+  /* ── Backtest results (design/backtest-results/COMPONENTS.md).
+        Names shared with other kits use the same values. */
+  --color-chart-benchmark: #9aa1ab; /* NIFTY line on the equity curve */
+  /* Year-wise heatmap: three steps by size of the month */
+  --color-heat-profit-1: #e3f4e8;
+  --color-heat-profit-2: #bfe5cb;
+  --color-heat-profit-3: #86cf9f;
+  --color-heat-loss-1: #f8dcdd;
+  --color-heat-loss-2: #f2b9bb;
+  --color-heat-loss-3: #ee9c9e;
+  --color-heat-empty: #f7f8fa; /* month with no trades: "–" */
+
   /* ── Misc greys from the component sheets */
   --color-text-disabled: #a1a6ad;
   --color-row-hover: #f4f5f7;
 
-  /* ── Copilot / AI. Uses the brand blue family — NO purple (Hakim, 31 Oct).
-        The canvas boards still show purple; code overrides it. */
-  --color-ai: #0782da; /* ✦ icon, accents (= brand) */
-  --color-ai-text: #0a5fa3; /* text on blue tint (= brand-text) */
-  --color-ai-tint: #f4f8fd; /* chips like "Sees your canvas" (= brand-tint) */
-  --color-ai-badge: #eaf4fc; /* ✦ badge on AI-made blocks */
-  --color-ai-border: #c4dff5; /* Copilot input */
-  --color-ai-border-soft: #b5d6f2; /* badge border, dashed Copilot cards */
+  /* ── Copilot / AI: violet = made by Copilot, nothing else (design/copilot, 2 Nov rule).
+        Only on the ✦ mark, Copilot-made blocks, ghosts and changed code lines —
+        never on the input, progress, spinners, buttons, focus or hover (those are blue). */
+  --color-ai: #6e56cf; /* ✦ mark, highlighted-code bar */
+  --color-ai-text: #5b45b8; /* violet words, e.g. "Waiting for your answer in Copilot" */
+  --color-ai-tint: #efeaff; /* Copilot-made block fill, changed code lines */
+  --color-ai-badge: #efeaff; /* ✦ badge fill */
+  --color-ai-border: #b9a8f7; /* Copilot-made block edge, ghost dashed edge */
+  --color-ai-border-soft: #d6cbfa; /* ✦ badge border */
 
   /* ── Typography */
   --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
@@ -144,16 +196,49 @@
   --shadow-menu: 0 16px 40px rgba(20, 22, 28, 0.14); /* dropdown menus */
   --shadow-dialog: 0 20px 50px rgba(20, 22, 28, 0.16); /* chart data dialog */
   --shadow-popover: 0 8px 24px rgba(16, 24, 40, 0.12); /* ⋯ menus, trade lists, limit panels */
+  --shadow-surface: 0 12px 32px rgba(20, 22, 28, 0.14); /* canvas popovers, selection bar, toast */
+  --shadow-lift: 0 12px 28px rgba(20, 22, 28, 0.18); /* block or group being dragged */
+  --shadow-rail-add: 0 2px 6px rgba(7, 130, 218, 0.25); /* the + on the rail */
+  --shadow-peek: 16px 0 40px rgba(20, 22, 28, 0.16); /* My Strategies floating over the builder */
+  --shadow-focus-ring: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-brand); /* keyboard focus, outside */
+  --shadow-focus-inset: inset 0 0 0 2px var(--color-brand); /* keyboard focus on rows, follows the radius */
 
   /* ── Layout sizes (fixed parts of the workspace) */
   --spacing-topbar: 56px;
   --spacing-contextbar: 54px;
   --spacing-bottompanel: 340px; /* chart panel height (above the bar) */
   --spacing-bottombar: 52px;
-  --spacing-copilot: 420px;
+  --spacing-copilot: 440px;
   --spacing-control: 36px; /* default button height */
   --spacing-control-sm: 32px; /* dropdowns */
   --spacing-control-xs: 28px;
+
+  /* ── Pine Script editor (design/pine-editor · Atoms). Aliases of existing colours, so the code
+        reads in the same palette as the rest of the app. */
+  --color-code-keyword: var(--color-brand-text); /* if, and, ta.ema, strategy.entry */
+  --color-code-builtin: var(--color-brand); /* close, volume, true, strategy.long */
+  --color-code-string: var(--color-buy-text);
+  --color-code-number: var(--color-warn-text);
+  --color-code-comment: var(--color-text-muted);
+  --color-code-text: var(--color-text-primary);
+  --color-code-line-number: var(--color-text-disabled);
+  --color-code-selection: #c4dff5; /* builder kit "blue pressed" (atom-states.ts) */
+  --color-code-fixed-token: #c9edd5; /* the token an AI fix just changed */
+  --color-code-log: #fbfcfd; /* log strip under the code */
+  --color-code-diff-minus: #8f1d1d; /* − row text on error-bg */
+  --color-code-diff-plus: #1c5e2e; /* + row text on buy-tint */
+  --color-code-radio-off: var(--color-group-edge);
+
+  /* ── Motion: Copilot replies arrive softly (fade + small rise), like a chat */
+  --animate-msg-in: msg-in 320ms cubic-bezier(0.2, 0, 0, 1) both;
+  --animate-fade-in: fade-in 240ms ease-out both;
+  --animate-typing: typing 1.2s ease-in-out infinite;
+  /* a block a Pine Script Run changed: glows once, then settles (not the editor layer) */
+  --animate-glow: glow 1s ease-out both;
+  @keyframes glow { from { box-shadow: 0 0 0 4px var(--color-brand-tint); } to { box-shadow: 0 0 0 4px transparent; } }
+  @keyframes msg-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes typing { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
 
   /* Tailwind still needs a base spacing unit for p-4, gap-2 etc. (4px grid) */
   --spacing: 4px;

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { useWorkspace } from './workspace';
+import { resultsView, variantFor } from '@/lib/backtestData';
 
 /*
   Backtest store = the setup block (SetupBlock-Unified sheet).
@@ -37,11 +37,14 @@ export interface SetupConfig {
   target: { on: boolean; amount: number };
 }
 
+/** The summary every setup tab and Compare use; the full page reads the trades (lib/backtestData). */
 export interface Results {
   netPnl: number;
-  maxDrawdown: number;
+  maxDrawdown: number; // negative ₹
   winRate: number;
   trades: number;
+  /** the run found no trades in the period (results page shows "No trades in this period") */
+  noTrades?: boolean;
 }
 
 export interface Setup extends SetupConfig {
@@ -55,7 +58,8 @@ export interface Setup extends SetupConfig {
   previous: Results | null; // for change pills after an update
   expanded: boolean;
   newerSavedVersion: boolean;
-  error: { reason: string } | null;
+  /** `partialUntil`: results up to this day (ISO) are kept and shown */
+  error: { reason: string; partialUntil?: string } | null;
 }
 
 export interface SavedSetup extends SetupConfig {
@@ -131,18 +135,10 @@ const blank = (): Setup => ({
 export const isComplete = (s: SetupConfig) => s.legs.length > 0 && s.legs.every((l) => l.strike !== '');
 
 /** Believable, repeatable results from the setup + strategy + period. */
+/** Same figures as the results page: Short Straddle is the real run, other setups a seeded variant. */
 function mockResults(s: Setup): Results {
-  const w = useWorkspace.getState();
-  const key = JSON.stringify([s.legs.map((l) => [l.position, l.type, l.strike, l.lots]), s.holding, s.sl, s.target, w.period, w.strategyVersion, s.index]);
-  let h = 7;
-  for (const c of key) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  const r = (k: number) => ((h >>> k) % 1000) / 1000;
-  return {
-    netPnl: Math.round((90000 + r(1) * 180000) / 50) * 50,
-    maxDrawdown: Math.round((22000 + r(5) * 26000) / 10) * 10,
-    winRate: Math.round(48 + r(9) * 18),
-    trades: Math.round(200 + r(13) * 70),
-  };
+  const v = resultsView({ variant: variantFor(s.name) }).stats;
+  return { netPnl: Math.round(v.profit), maxDrawdown: Math.round(v.mdd), winRate: Math.round(v.win * 10) / 10, trades: v.trades };
 }
 
 const RUN_MS = 1600;
@@ -169,9 +165,12 @@ export const useBacktest = create<BacktestState>((set, get) => {
       const setup = cur.setups.find((x) => x.id === nextId);
       if (setup) {
         if (cur.failSetupName && setup.name === cur.failSetupName) {
+          // partial results are kept up to the last good day
           patchSetup(nextId, {
             status: 'failed',
-            error: { reason: 'Weekly option data for NIFTY starts in Mar 2024; this Period begins Jan 2024.' },
+            everRun: true,
+            results: mockResults(setup),
+            error: { reason: 'data for 12 Mar 2026 is missing. Results stop at 11 Mar.', partialUntil: '2026-03-11' },
           });
           set({ failSetupName: null });
         } else {

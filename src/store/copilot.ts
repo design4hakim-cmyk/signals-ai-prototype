@@ -1,0 +1,639 @@
+import { create } from 'zustand';
+import { describeCondition, findNode, flatConditions, removeNodes, replaceNode, uid } from '@/lib/conditions';
+import { computeSignals } from '@/lib/signals';
+import { generateSeries } from '@/mock/candles';
+import {
+  EXIT_OPTIONS, exitFor, mainEntry, matchScript, partlyFitsEntry, rsiExit, simplifiedEntry, TIMING, VAGUE_OPTIONS, volumeFilter, vwapEntry, WHY_ANSWER, STOP_LOSS_ANSWER,
+} from '@/mock/copilot';
+import { seedChats, seedNotes } from '@/mock/chats';
+import type { Condition, Operand, Side, StrategyTree } from '@/types/strategy';
+import { sameTree } from '@/lib/pineParse';
+import { useBacktest } from './backtest';
+import { useCanvas } from './canvas';
+import { usePine } from './pine';
+import { CODE_ONLY } from '@/mock/pine';
+import { useStrategy } from './strategy';
+import { useWorkspace } from './workspace';
+
+/*
+  Copilot store (design/copilot). One AI card per request; it changes state IN PLACE:
+    Understood (+ one question) → Building → Applied → Strategy ready.
+  Adding goes straight onto the canvas with Undo. Changing or removing blocks YOU made
+  is previewed first and waits for Apply. Fit is decided before anything is placed.
+  Everything is scripted (mock/copilot.ts); timings are faked.
+*/
+
+export interface Counts {
+  entries: number;
+  exits: number;
+}
+
+export type Card =
+  | {
+      kind: 'main';
+      id: string;
+      phase: 'thinking' | 'understood' | 'building' | 'applied' | 'ready' | 'stopped';
+      entry: Condition[];
+      exit: Condition | null;
+      exitNote?: string;
+      question: { chosen: number | null } | null;
+      placed: number;
+      counts: Counts | null;
+      mark: number; // canvas history length before this card added anything
+    }
+  | { kind: 'refineAdd'; id: string; side: Side; added: Condition; before: Counts; after: Counts; mark: number }
+  | { kind: 'review'; id: string; phase: 'pending' | 'applied' | 'cancelled'; change: { id: string; from: number; to: number } | null; removal: Condition | null; before: number; after: number; mark: number }
+  | { kind: 'fit'; id: string; phase: 'check' | 'built' | 'simplified'; counts: Counts | null; mark: number }
+  | { kind: 'codeOnly'; id: string }
+  | { kind: 'failed'; id: string; phase: 'thinking' | 'failed' | 'skipped'; detailsOpen: boolean; mark: number; entryCount: number }
+  | { kind: 'vague'; id: string; chosen: number | null }
+  | { kind: 'note'; id: string; text: string }
+  /** an answer with a headline (seeded chats: "March: 4 losing trades in a row") */
+  | { kind: 'answer'; id: string; title: string; sub?: string; text: string }
+  /** after about 50 turns: start a fresh chat or keep going */
+  | { kind: 'long'; id: string; dismissed?: boolean };
+
+/**
+ * `record`: the card is from an older chat, so it's read-only with a date chip ("Applied · 2 Nov").
+ * `live`: one note at the end of an older chat when the strategy changed since.
+ */
+export type Message =
+  | { kind: 'user'; id: string; text: string; at?: number }
+  | { kind: 'card'; id: string; card: Card; at?: number; record?: string }
+  | { kind: 'live'; id: string; text: string };
+
+/** A chat belongs to one strategy (design/copilot/CONVERSATIONS.md). null = No strategy. */
+export interface Chat {
+  id: string;
+  strategyId: string | null;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: Message[];
+  /** the strategy as it was at the chat's last card, for the live note */
+  snapshot: StrategyTree | null;
+}
+
+interface CopilotState {
+  /** the open chat's thread */
+  messages: Message[];
+  chats: Chat[];
+  activeChatId: string | null;
+  /** the strategy the builder has open: a saved id, an untitled key, or null (empty workspace) */
+  strategyId: string | null;
+  /** what Copilot remembers, per strategy */
+  notes: Record<string, string[]>;
+  view: 'chat' | 'pine';
+  listening: boolean;
+  /** a reply is on its way (the ✦ … indicator) */
+  typing: boolean;
+
+  /** `stay`: asked from the Pine Script editor's Ask box, so the editor stays open */
+  send: (text: string, opts?: { stay?: boolean }) => void;
+  answer: (cardId: string, option: number) => void;
+  stop: () => void;
+  resume: (cardId: string) => void;
+  undo: (cardId: string) => void;
+  applyReview: (cardId: string) => void;
+  cancelReview: (cardId: string) => void;
+  buildAnyway: (cardId: string) => void;
+  simplify: (cardId: string) => void;
+  retryFailed: (cardId: string) => void;
+  skipExit: (cardId: string) => void;
+  addExitOnCanvas: () => void;
+  toggleDetails: (cardId: string) => void;
+  pickVague: (cardId: string, option: number) => void;
+  checkOnChart: () => void;
+  runBacktest: () => void;
+  setView: (v: 'chat' | 'pine') => void;
+  openLine: (line: number) => void;
+  newChat: () => void;
+  /** the builder opened this strategy: its last chat, scrolled to the end, or its empty state */
+  openStrategy: (strategyId: string | null) => void;
+  openChat: (chatId: string) => void;
+  renameChat: (chatId: string, title: string) => void;
+  deleteChat: (chatId: string) => void;
+  /** Delete strategy: its chats and notes go too */
+  forgetStrategy: (strategyId: string) => void;
+  /** Duplicate: notes are copied (not the chats), and the copy knows where it came from */
+  copyNotes: (from: string, to: string, fromName: string) => void;
+  addNote: (strategyId: string, text: string) => void;
+  removeNote: (strategyId: string, index: number) => void;
+  clearNotes: (strategyId: string) => void;
+  keepGoing: (cardId: string) => void;
+  set: (p: Partial<CopilotState>) => void;
+}
+
+/* ── helpers ───────────────────────────────────────────────────── */
+
+const C = () => useCanvas.getState();
+const tree = () => ({ entry: C().entry, exit: C().exit });
+let timers: ReturnType<typeof setTimeout>[] = [];
+let opening = false;
+const later = (ms: number, f: () => void) => timers.push(setTimeout(f, ms));
+const stopTimers = () => {
+  timers.forEach(clearTimeout);
+  timers = [];
+};
+
+/** Signals from the seeded engine, for what's on the canvas right now. */
+export function countsNow(): Counts {
+  const w = useWorkspace.getState();
+  const candles = generateSeries(w.instrument, w.timeframe, w.chartData, w.period);
+  const t = tree();
+  // With no exit yet, one trade opens and never closes (1 entry). To show how often the
+  // entry fires, count it as if the suggested exit were there.
+  if (!flatConditions(t.exit).length && flatConditions(t.entry).length) {
+    const stand = computeSignals(candles, w.limits, { ...t, exit: { ...t.exit, children: [exitFor(flatConditions(t.entry)).cond()] } });
+    return { entries: stand.entries, exits: 0 };
+  }
+  const r = computeSignals(candles, w.limits, t);
+  return { entries: r.entries, exits: r.exits };
+}
+
+const strategyName = () => useStrategy.getState().name ?? 'Untitled strategy';
+/** Empty both sections as one undoable step. */
+const clearCanvas = () => {
+  C().set({ codeOnly: false });
+  if (!flatConditions(C().entry).length && !flatConditions(C().exit).length) return;
+  C().copilotCommit({ entry: { ...C().entry, children: [] }, exit: { ...C().exit, children: [] } }, 'Copilot started a new strategy');
+};
+/** ✦ toast on the canvas, except in the Pine Script view (no toasts there: the status line says it). */
+const toastAi = (text: string) => { if (useCopilot.getState().view !== 'pine') C().showToast(text, true, 'ai'); };
+const findCond = (pred: (c: Condition) => boolean) => [...flatConditions(C().entry), ...flatConditions(C().exit)].find(pred);
+
+/** A plain answer in words, from what's on the canvas now. */
+function chatReply(t: string): string {
+  const entry = flatConditions(C().entry);
+  const exit = flatConditions(C().exit);
+  const list = (cs: Condition[]) => cs.map((c) => describeCondition(c)).join('; ');
+  const state = entry.length
+    ? `Entry: ${list(entry)}. ${exit.length ? `Exit: ${list(exit)}.` : 'No exit yet.'}`
+    : 'The canvas is empty.';
+  if (/^(hi|hey|hello)\b/.test(t)) return 'Hi! Describe when to buy and when to exit in plain words, and I’ll build it on the canvas.';
+  if (/^(thanks|thank you|ok|okay)\b/.test(t)) return 'You’re welcome. Check it on the chart, or run a backtest when you’re ready.';
+  if (/did you|is it|have you|added|done/.test(t)) return entry.length ? `Yes, it’s on the canvas. ${state}` : 'Not yet, the canvas is empty. Describe your idea and I’ll build it.';
+  if (/rsi/.test(t)) return 'RSI (Relative Strength Index) measures how strong recent moves are, from 0 to 100. Above 70 is often called overbought, below 30 oversold.';
+  if (/macd/.test(t)) return 'MACD compares a fast and a slow EMA (12 and 26). When the fast one crosses above the slow one, momentum is turning up.';
+  if (/\bema\b|moving average|\bma\b/.test(t)) return 'A moving average smooths the price over N candles. EMA weights recent candles more, so it reacts faster than a simple MA.';
+  if (/vwap/.test(t)) return 'VWAP is the average price of the day, weighted by volume. It resets every morning at 09:15.';
+  if (/what.*(strategy|canvas|built|have)|current|summar/.test(t)) return state;
+  if (/backtest/.test(t)) return 'Switch to the Backtest tab and press Run. It tests your entry and exit on past data with the setups you choose.';
+  return `I can build entries and exits from a plain description, change blocks you made, or explain an indicator. ${state} What should it do?`;
+}
+
+/* ── chats ─────────────────────────────────────────────────────── */
+
+const shortDate = (t: number) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+
+/** The date chip on a card in an older chat. */
+function recordLabel(c: Card, at: number): string {
+  const d = shortDate(at);
+  if (c.kind === 'note' || c.kind === 'answer' || c.kind === 'vague' || c.kind === 'long') return `Answered · ${d}`;
+  if (c.kind === 'review' && c.phase !== 'applied') return `Not applied · ${d}`;
+  if (c.kind === 'fit' && c.phase === 'check') return `Not applied · ${d}`;
+  if (c.kind === 'failed' && c.phase !== 'skipped') return `Partly applied · ${d}`;
+  return `Applied · ${d}`;
+}
+
+const shortName = (o: Operand | null) =>
+  !o ? '' : o.type === 'number' ? String(o.value) : o.id === 'sma' ? (o.params.source === 'Volume' ? 'volume average' : `MA ${o.params.length}`) : o.id === 'ema' ? `EMA ${o.params.length}` : o.id === 'price' ? 'Close' : o.id.toUpperCase();
+
+/** "Since this chat you changed RSI to 55 and removed the volume filter." */
+function liveNote(then: StrategyTree, now: StrategyTree): string {
+  const all = (t: StrategyTree) => [...flatConditions(t.entry), ...flatConditions(t.exit)];
+  const key = (c: Condition) => (c.custom ? c.custom.name : `${c.left?.type === 'indicator' ? c.left.id + c.left.params.length : c.left?.type}|${c.relation}|${c.right?.type === 'indicator' ? c.right.id : 'n'}`);
+  const label = (c: Condition) => (c.left?.type === 'indicator' && c.left.id === 'volume' ? 'the volume filter' : c.custom ? c.custom.text : `“${describeCondition(c)}”`);
+  const left = all(now);
+  const parts: string[] = [];
+  for (const o of all(then)) {
+    const i = left.findIndex((x) => key(x) === key(o));
+    if (i < 0) { parts.push(`removed ${label(o)}`); continue; }
+    const x = left.splice(i, 1)[0];
+    if (x.right?.type === 'number' && o.right?.type === 'number' && x.right.value !== o.right.value) parts.push(`changed ${shortName(o.left)} to ${x.right.value}`);
+  }
+  for (const x of left) parts.push(`added ${label(x)}`);
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0] ?? 'changed the strategy';
+  return `Since this chat you ${list}. I’m looking at the strategy as it is now.`;
+}
+
+export const useCopilot = create<CopilotState>((set, get) => {
+  const add = (m: Message) => set((s) => ({ messages: [...s.messages, m.kind === 'live' ? m : { ...m, at: Date.now() }] }));
+  const card = (c: Card) => {
+    set({ typing: false });
+    // asked from the Pine Script editor and answered in words: the answer is in the chat
+    const pine = usePine.getState();
+    if (pine.asking && (c.kind === 'note' || c.kind === 'answer' || c.kind === 'vague')) {
+      pine.set({ asking: false, copilotEditing: false, log: [...pine.log.slice(-5), { id: Date.now(), time: new Date().toLocaleTimeString('en-GB', { hour12: false }), text: 'Copilot replied in Chat', tone: 'muted' }] });
+    }
+    add({ kind: 'card', id: c.id, card: c });
+  };
+  const patch = (id: string, p: Partial<Card>) =>
+    set((s) => ({ messages: s.messages.map((m) => (m.kind === 'card' && m.id === id ? { ...m, card: { ...m.card, ...p } as Card } : m)) }));
+  const cardOf = (id: string) => get().messages.find((m): m is Extract<Message, { kind: 'card' }> => m.kind === 'card' && m.id === id)?.card;
+  /** remember the code just before a Copilot change, so the Pine view can highlight what it changed */
+  /**
+   * Copilot is about to change the canvas: remember the code first. Once the change lands
+   * (same tick), the editor shows the changed lines in violet with "Copilot changed N lines · note".
+   */
+  const markPine = (note: string) => {
+    const before = usePine.getState().ran;
+    queueMicrotask(() => {
+      usePine.getState().copilotChanged(before, note);
+    });
+  };
+
+  /** Place conditions one by one (ghosts), then commit them as one step (one Undo). */
+  const build = (cardId: string, side: Side, conds: Condition[], from: number, done: () => void) => {
+    const show = (i: number) =>
+      C().set({
+        copilotPreview: {
+          side,
+          rows: conds.map((c, j) => (j < i ? { kind: 'ghost' as const, cond: c } : j === i ? { kind: 'ghost' as const, cond: c } : { kind: 'skeleton' as const })),
+          placeholder: C().copilotPreview?.placeholder ?? null,
+        },
+      });
+    const step = (i: number) => {
+      if (i >= conds.length) {
+        markPine(side === 'entry' ? 'added the entry' : 'added the exit');
+        const placeholder = C().copilotPreview?.placeholder ?? null;
+        C().copilotAdd(side, conds.slice(from), `Copilot added ${conds.length - from} ${side} condition${conds.length - from > 1 ? 's' : ''}`);
+        C().set({ copilotPreview: placeholder ? { side: placeholder, rows: [], placeholder } : null });
+        toastAi(`Added ${conds.length - from} ${side} condition${conds.length - from > 1 ? 's' : ''}`);
+        done();
+        return;
+      }
+      show(i);
+      patch(cardId, { placed: i } as Partial<Card>);
+      later(TIMING.place, () => step(i + 1));
+    };
+    step(from);
+  };
+
+  /** The main flow: understood (+ exit question) → building → applied → strategy ready. */
+  const runMain = (entry: Condition[]) => {
+    const id = uid('card');
+    const mark = C().history.length;
+    card({ kind: 'main', id, phase: 'thinking', entry, exit: null, question: { chosen: null }, placed: 0, counts: null, mark });
+    useStrategy.setState({ mode: 'build' });
+    later(TIMING.understood, () => {
+      // entry is clear, so it's queued; the exit isn't, so Copilot asks once
+      patch(id, { phase: 'understood' } as Partial<Card>);
+      clearCanvas(); // a new idea is a new strategy (Undo brings the old blocks back)
+      C().set({ copilotPreview: { side: 'entry', rows: entry.map(() => ({ kind: 'skeleton' as const })), placeholder: 'exit' }, codeOnly: false });
+      later(TIMING.understood, () => {
+        patch(id, { phase: 'building' } as Partial<Card>);
+        build(id, 'entry', entry, 0, () => {
+          const c = cardOf(id);
+          if (c?.kind !== 'main') return;
+          const counts = countsNow();
+          // the exit may already be answered while the entry was building
+          if (c.question?.chosen != null) finishExit(id, c.question.chosen);
+          else patch(id, { phase: 'applied', placed: entry.length, counts } as Partial<Card>);
+        });
+      });
+    });
+  };
+
+  const finishExit = (id: string, option: number) => {
+    const c = cardOf(id);
+    if (c?.kind !== 'main') return;
+    if (option === 0) {
+      const exit = exitFor(c.entry).cond();
+      patch(id, { exit, phase: 'building', placed: 0 } as Partial<Card>);
+      C().set({ copilotPreview: { side: 'exit', rows: [{ kind: 'ghost', cond: exit }], placeholder: null } });
+      later(TIMING.place, () => {
+        markPine('added the exit');
+        C().copilotAdd('exit', [exit], 'Copilot added the exit');
+        C().set({ copilotPreview: null });
+        toastAi('Added the exit');
+        patch(id, { phase: 'ready', placed: c.entry.length, counts: countsNow() } as Partial<Card>);
+      });
+    } else {
+      C().set({ copilotPreview: null });
+      patch(id, {
+        phase: 'ready',
+        placed: c.entry.length,
+        counts: countsNow(),
+        exitNote: option === 1 ? 'Exits at 15:15 (the setup’s square-off time)' : 'Add your exit on the canvas',
+      } as Partial<Card>);
+      if (option === 2) C().addCondition('exit');
+    }
+  };
+
+  return {
+    messages: [],
+    chats: seedChats(),
+    activeChatId: null,
+    strategyId: null,
+    notes: seedNotes(),
+    view: 'chat',
+    pineBase: null,
+    pineNote: '',
+    focusLine: null,
+    listening: false,
+    typing: false,
+
+    send: (raw, opts = {}) => {
+      const text = raw.trim();
+      if (!text) return;
+      // an open question takes the typed answer
+      const open = [...get().messages].reverse().find((m) => m.kind === 'card' && m.card.kind === 'main' && m.card.question && m.card.question.chosen === null && m.card.phase !== 'thinking');
+      const t = text.toLowerCase();
+      // only a reply that names an exit answers it; a question still gets answered in words
+      if (open && open.kind === 'card' && !/\?$/.test(t) && /15:15|3:15|time|canvas|myself|i'll|cross|below|suggest|first|yes|ok/.test(t)) {
+        add({ kind: 'user', id: uid('u'), text });
+        return get().answer(open.id, /15:15|time|3:15/.test(t) ? 1 : /canvas|myself|i'll/.test(t) ? 2 : 0);
+      }
+      add({ kind: 'user', id: uid('u'), text });
+      if (!opts.stay) get().setView('chat');
+      set({ typing: true });
+      const m = matchScript(text);
+      const id = uid('card');
+      switch (m.id) {
+        case 'chat':
+          return later(TIMING.understood, () => card({ kind: 'note', id, text: chatReply(t) }));
+        case 'why':
+          return later(TIMING.understood, () => card({ kind: 'note', id, text: WHY_ANSWER }));
+        case 'march':
+          return later(TIMING.understood, () => card({ kind: 'answer', id, title: 'March: 4 losing trades in a row', sub: `${strategyName()} · ${useWorkspace.getState().instrument}`, text: 'Three entries fired on gap-downs after 09:15. A 09:30 start time would have skipped them.' }));
+        case 'stopLoss':
+          return later(TIMING.understood, () => card({ kind: 'note', id, text: STOP_LOSS_ANSWER }));
+        case 'exit': {
+          const entry = flatConditions(C().entry);
+          if (!entry.length) return later(TIMING.understood, () => card({ kind: 'note', id, text: 'There’s no entry yet, so there’s nothing to exit from. Describe when to buy first, for example “Buy when EMA 9 crosses above EMA 21”.' }));
+          const exit = /15:15|3:15/.test(t) ? null : exitFor(entry).cond();
+          if (!exit) return later(TIMING.understood, () => card({ kind: 'note', id, text: 'Time exits use the setup’s square-off time (15:15). Set it in the Backtest tab; the entry stays as it is.' }));
+          const before = countsNow();
+          later(TIMING.understood, () => {
+            const mark = C().history.length;
+            markPine('added the exit');
+            C().copilotAdd('exit', [exit], 'Copilot added an exit');
+            // the exit is set now, so an earlier "How should it exit?" is answered
+            if (open && open.kind === 'card') {
+              C().set({ copilotPreview: null });
+              patch(open.id, { question: null } as Partial<Card>);
+            }
+            toastAi('Added 1 condition to Exit');
+            card({ kind: 'refineAdd', id, side: 'exit', added: exit, before, after: countsNow(), mark });
+          });
+          return;
+        }
+        case 'main':
+          return runMain((m.entry ?? mainEntry)());
+        case 'refineAdd': {
+          const before = countsNow();
+          const added = volumeFilter();
+          later(TIMING.understood, () => {
+            const mark = C().history.length;
+            markPine('added a volume filter');
+            C().copilotAdd('entry', [added], 'Copilot added a volume filter to Entry');
+            toastAi('Added 1 condition to Entry');
+            card({ kind: 'refineAdd', id, side: 'entry', added: findCond((c) => c.left?.type === 'indicator' && c.left.id === 'volume') ?? added, before, after: countsNow(), mark });
+          });
+          return;
+        }
+        case 'review': {
+          const rsi = findCond((c) => c.left?.type === 'indicator' && c.left.id === 'rsi' && c.right?.type === 'number' && (c.relation === 'Greater Than' || c.relation === 'Greater Than or Equal'));
+          const vol = findCond((c) => c.left?.type === 'indicator' && c.left.id === 'volume');
+          if (!rsi && !vol) return later(TIMING.understood, () => card({ kind: 'note', id, text: 'There’s no RSI threshold or volume filter on the canvas to change yet. Describe the strategy first, and I’ll build it.' }));
+          const before = countsNow().entries;
+          // what the canvas would give after the change (worked out, not applied)
+          let next = tree();
+          if (rsi && rsi.right?.type === 'number') next = replaceNode(next, rsi.id, { ...rsi, right: { ...rsi.right, value: 60 } });
+          if (vol) next = removeNodes(next, [vol.id]);
+          const w = useWorkspace.getState();
+          const after = computeSignals(generateSeries(w.instrument, w.timeframe, w.chartData, w.period), w.limits, next).entries;
+          later(TIMING.understood, () => {
+            C().set({ pending: { changes: rsi && rsi.right?.type === 'number' ? { [rsi.id]: { ...rsi, right: { ...rsi.right, value: 60 } } } : {}, removals: vol ? [vol.id] : [] } });
+            card({ kind: 'review', id, phase: 'pending', change: rsi && rsi.right?.type === 'number' ? { id: rsi.id, from: rsi.right.value, to: 60 } : null, removal: vol ?? null, before, after, mark: C().history.length });
+          });
+          return;
+        }
+        case 'partlyFits':
+          return later(TIMING.understood, () => card({ kind: 'fit', id, phase: 'check', counts: null, mark: C().history.length }));
+        case 'codeOnly':
+          return later(TIMING.understood, () => {
+            C().set({ copilotPreview: null });
+            usePine.getState().copilotCode(CODE_ONLY.replace('EMA 9/21 + RSI Trend', strategyName()), 'wrote a code-only strategy');
+            card({ kind: 'codeOnly', id });
+          });
+        case 'failed': {
+          const mark = C().history.length;
+          card({ kind: 'failed', id, phase: 'thinking', detailsOpen: false, mark, entryCount: 3 });
+          later(TIMING.understood, () => {
+            clearCanvas();
+            C().set({ copilotPreview: { side: 'entry', rows: vwapEntry().map(() => ({ kind: 'skeleton' as const })), placeholder: null } });
+            build(id, 'entry', vwapEntry(), 0, () => patch(id, { phase: 'failed' } as Partial<Card>)); // retries happen silently; only the final failure shows
+          });
+          return;
+        }
+        case 'vague':
+          return later(TIMING.understood, () => card({ kind: 'vague', id, chosen: null }));
+      }
+    },
+
+    answer: (id, option) => {
+      const c = cardOf(id);
+      if (c?.kind !== 'main' || !c.question || c.question.chosen !== null) return;
+      patch(id, { question: { chosen: option } } as Partial<Card>);
+      if (c.phase === 'applied') finishExit(id, option);
+    },
+
+    // Stop keeps what's placed
+    stop: () => {
+      stopTimers();
+      set({ typing: false });
+      const c = [...get().messages].reverse().find((m) => m.kind === 'card' && m.card.kind === 'main' && m.card.phase === 'building');
+      const prev = C().copilotPreview;
+      if (c && c.kind === 'card' && c.card.kind === 'main') {
+        const placed = Math.max(1, c.card.placed);
+        const side = prev?.side ?? 'entry';
+        const list = side === 'entry' ? c.card.entry : c.card.exit ? [c.card.exit] : [];
+        if (placed && list.length) {
+          C().copilotAdd(side, list.slice(0, placed), 'Copilot added part of the entry (stopped)');
+        }
+        C().set({ copilotPreview: null });
+        patch(c.id, { phase: 'stopped', placed } as Partial<Card>);
+      } else C().set({ copilotPreview: null });
+    },
+    resume: (id) => {
+      const c = cardOf(id);
+      if (c?.kind !== 'main') return;
+      patch(id, { phase: 'building' } as Partial<Card>);
+      build(id, 'entry', c.entry, c.placed, () => patch(id, { phase: 'applied', placed: c.entry.length, counts: countsNow() } as Partial<Card>));
+    },
+    // Undo: back to how the canvas was before this card
+    undo: (id) => {
+      const c = cardOf(id);
+      if (!c || !('mark' in c)) return;
+      while (C().history.length > c.mark) C().undo();
+      C().set({ copilotPreview: null, pending: null, toast: null });
+      usePine.setState({ aiLines: [] });
+      add({ kind: 'card', id: uid('card'), card: { kind: 'note', id: uid('n'), text: 'Undone. The canvas is back to how it was.' } });
+    },
+
+    applyReview: (id) => {
+      const c = cardOf(id);
+      if (c?.kind !== 'review') return;
+      let next = tree();
+      if (c.change) {
+        const node = findNode(next.entry, c.change.id) ?? findNode(next.exit, c.change.id);
+        if (node?.kind === 'cond' && node.right?.type === 'number') next = replaceNode(next, node.id, { ...node, right: { ...node.right, value: c.change.to }, copilot: true });
+      }
+      if (c.removal) next = removeNodes(next, [c.removal.id]);
+      markPine('made RSI stricter and removed the volume filter');
+      C().copilotCommit(next, 'Copilot applied 2 changes', get().view === 'pine' ? undefined : 'Applied 2 changes');
+      patch(id, { phase: 'applied' } as Partial<Card>);
+    },
+    cancelReview: (id) => {
+      C().set({ pending: null });
+      patch(id, { phase: 'cancelled' } as Partial<Card>);
+    },
+
+    // Partly fits → one Custom logic block that runs on code
+    buildAnyway: (id) => {
+      const mark = C().history.length;
+      clearCanvas(); // a new strategy, as one step (Undo brings the old one back)
+      markPine('added custom logic');
+      C().copilotAdd('entry', partlyFitsEntry(), 'Copilot added a custom logic entry', 1);
+      C().copilotAdd('exit', [rsiExit()], 'Copilot added the exit', 0);
+      toastAi('Added to canvas · 1 custom block');
+      // the custom block runs on code, so the counts are the board's
+      patch(id, { phase: 'built', counts: { entries: 11, exits: 11 }, mark } as Partial<Card>);
+    },
+    simplify: (id) => {
+      const mark = C().history.length;
+      clearCanvas(); // a new strategy, as one step (Undo brings the old one back)
+      markPine('simplified the entry');
+      C().copilotAdd('entry', simplifiedEntry(), 'Copilot added a simplified entry', 1);
+      C().copilotAdd('exit', [rsiExit()], 'Copilot added the exit', 0);
+      toastAi('Added 2 entry conditions');
+      patch(id, { phase: 'simplified', counts: countsNow(), mark } as Partial<Card>);
+    },
+
+    retryFailed: (id) => {
+      patch(id, { phase: 'thinking' } as Partial<Card>);
+      later(TIMING.understood * 2, () => patch(id, { phase: 'failed' } as Partial<Card>));
+    },
+    skipExit: (id) => patch(id, { phase: 'skipped' } as Partial<Card>),
+    addExitOnCanvas: () => {
+      useStrategy.setState({ mode: 'build' });
+      C().addCondition('exit');
+    },
+    toggleDetails: (id) => {
+      const c = cardOf(id);
+      if (c?.kind === 'failed') patch(id, { detailsOpen: !c.detailsOpen } as Partial<Card>);
+    },
+
+    pickVague: (id, option) => {
+      if (option === 3) return patch(id, { chosen: 3 } as Partial<Card>);
+      patch(id, { chosen: option } as Partial<Card>);
+      add({ kind: 'user', id: uid('u'), text: VAGUE_OPTIONS[option].label });
+      runMain(VAGUE_OPTIONS[option].entry());
+    },
+
+    // Proof: open the chart with ▲ entry / ▼ exit markers (the Update chart rule still holds)
+    checkOnChart: () => {
+      useStrategy.setState({ mode: 'build' });
+      const w = useWorkspace.getState();
+      w.set({ panelOpen: true, bottomTab: 'chart' });
+      if (w.pendingChanges > 0 || w.chartStatus === 'error') w.updateChart(countsNow());
+    },
+    runBacktest: () => {
+      useStrategy.setState({ mode: 'backtest' });
+      setTimeout(() => useBacktest.getState().runBacktests(), 0);
+    },
+
+    // the Pine Script toggle: opening takes the editor's snapshot, closing keeps an un-run draft
+    setView: (view) => {
+      if (view === get().view) return;
+      if (view === 'pine') usePine.getState().openEditor();
+      else usePine.getState().closeEditor();
+      set({ view });
+    },
+    openLine: (line) => {
+      if (get().view === 'pine') usePine.getState().goTo(line);
+      else {
+        usePine.getState().openEditor(line);
+        set({ view: 'pine' });
+      }
+    },
+    newChat: () => {
+      stopTimers();
+      C().set({ copilotPreview: null, pending: null });
+      if (get().view === 'pine') usePine.getState().closeEditor();
+      // the chat itself is made with its first message
+      set({ messages: [], activeChatId: null, view: 'chat', typing: false });
+    },
+
+    openStrategy: (strategyId) => {
+      set({ strategyId });
+      // its un-run Pine Script draft comes back with it
+      usePine.getState().switchStrategy(strategyId ?? 'none');
+      const last = get().chats.filter((c) => c.strategyId === strategyId && strategyId !== null).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      if (last) get().openChat(last.id);
+      else get().newChat();
+    },
+    openChat: (chatId) => {
+      const c = get().chats.find((x) => x.id === chatId);
+      if (!c) return;
+      stopTimers();
+      C().set({ copilotPreview: null, pending: null });
+      if (get().view === 'pine') usePine.getState().closeEditor();
+      // older cards are records: no actions, a date chip instead
+      const messages: Message[] = c.messages.filter((m) => m.kind !== 'live').map((m) => (m.kind === 'card' && !m.record && m.card.kind !== 'long' ? { ...m, record: recordLabel(m.card, m.at ?? c.updatedAt) } : m));
+      // the strategy moved on since: one live note, added on open
+      if (c.strategyId !== null && c.strategyId === get().strategyId && c.snapshot) {
+        const now = tree();
+        if (!sameTree(c.snapshot, now)) messages.push({ kind: 'live', id: uid('live'), text: liveNote(c.snapshot, now) });
+      }
+      opening = true; // opening a chat isn't an update to it
+      set({ activeChatId: c.id, messages, view: 'chat', typing: false });
+      opening = false;
+    },
+    renameChat: (chatId, title) => set((s) => ({ chats: s.chats.map((c) => (c.id === chatId ? { ...c, title: title.trim() || c.title } : c)) })),
+    deleteChat: (chatId) => {
+      set((s) => ({ chats: s.chats.filter((c) => c.id !== chatId) }));
+      if (get().activeChatId === chatId) get().newChat();
+    },
+    forgetStrategy: (strategyId) =>
+      set((s) => {
+        const notes = { ...s.notes };
+        delete notes[strategyId];
+        return { chats: s.chats.filter((c) => c.strategyId !== strategyId), notes };
+      }),
+    copyNotes: (from, to, fromName) => set((s) => ({ notes: { ...s.notes, [to]: [`Copied from ${fromName}.`, ...(s.notes[from] ?? [])] } })),
+    addNote: (sid, text) => text.trim() && set((s) => ({ notes: { ...s.notes, [sid]: [...(s.notes[sid] ?? []), text.trim()] } })),
+    removeNote: (sid, i) => set((s) => ({ notes: { ...s.notes, [sid]: (s.notes[sid] ?? []).filter((_, k) => k !== i) } })),
+    clearNotes: (sid) => set((s) => ({ notes: { ...s.notes, [sid]: [] } })),
+    keepGoing: (cardId) => patch(cardId, { dismissed: true } as Partial<Card>),
+    set: (p) => set(p),
+  };
+});
+
+export { EXIT_OPTIONS, VAGUE_OPTIONS };
+
+/* Keep the open chat in the chat list: made on its first message, titled from it; its snapshot
+   follows the strategy; a long thread gets the "getting long" card once. */
+useCopilot.subscribe((s, prev) => {
+  if (s.messages === prev.messages || !s.messages.length || opening) return;
+  const now = Date.now();
+  const snapshot = { entry: useCanvas.getState().entry, exit: useCanvas.getState().exit };
+  const turns = s.messages.filter((m) => m.kind === 'user').length;
+  if (turns >= 50 && !s.messages.some((m) => m.kind === 'card' && m.card.kind === 'long')) {
+    const card: Card = { kind: 'long', id: uid('long') };
+    queueMicrotask(() => useCopilot.setState((x) => ({ messages: [...x.messages, { kind: 'card', id: card.id, card, at: now }] })));
+  }
+  const active = s.chats.find((c) => c.id === s.activeChatId);
+  // someone else's strategy's chat is read-only: nothing to write back
+  if (active && active.strategyId !== s.strategyId) return;
+  if (!active) {
+    const first = s.messages.find((m) => m.kind === 'user');
+    if (!first || first.kind !== 'user') return;
+    const chat: Chat = { id: uid('chat'), strategyId: s.strategyId, title: first.text.length > 42 ? `${first.text.slice(0, 40).trim()}…` : first.text, createdAt: now, updatedAt: now, messages: s.messages, snapshot };
+    useCopilot.setState({ chats: [chat, ...s.chats], activeChatId: chat.id });
+    return;
+  }
+  useCopilot.setState({ chats: s.chats.map((c) => (c.id === active.id ? { ...c, messages: s.messages, updatedAt: now, snapshot } : c)) });
+});

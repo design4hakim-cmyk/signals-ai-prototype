@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronDownIcon, FolderIcon } from '@/components/ui/icons';
 import { Popover } from '@/components/ui/Popover';
 import { resultsCurrent, useBacktest } from '@/store/backtest';
+import { useLibrary } from '@/store/library';
 import { useStrategy } from '@/store/strategy';
 import { useWorkspace } from '@/store/workspace';
 import type { Period } from '@/types/market';
 import { MoreMenu } from './MoreMenu';
 import { NameField } from './NameField';
 import { RunningTrades } from './RunningTrades';
-import { TradeDialogs } from './TradeDialogs';
+import { TradeDialogs, type TradeDialog } from './TradeDialogs';
+import { usePine } from '@/store/pine';
 
 /*
   Top nav bar (TopNav-Components sheet).
@@ -25,16 +27,23 @@ export function TopNav() {
   const running = useBacktest((s) => s.run !== null);
   const current = resultsCurrent(setups);
   const trading = st.forwardTests.length + st.liveTrades.length > 0;
-  const [dialog, setDialog] = useState<'unsaved' | 'live' | null>(null);
+  const [dialog, setDialog] = useState<TradeDialog>(null);
+  const unrun = usePine((p) => p.code !== p.ran);
 
   const showDraft = st.saved && !trading;
   const canSave = st.entry !== 'empty' && (!st.saved || st.dirty);
 
-  const onUpdate = () => (st.liveTrades.length ? setDialog('live') : st.save());
+  const saveNow = () => (st.saved ? (st.liveTrades.length ? setDialog('live') : st.save()) : st.startNaming());
+  // un-run Pine Script: ask to run it first
+  const onUpdate = () => (unrun ? setDialog('unrunSave') : saveNow());
   const onTrade = () => {
+    if (unrun) return setDialog('unrunTrade');
     if (st.dirty || (!st.saved && st.entry !== 'empty')) return setDialog('unsaved');
-    st.showToast('The Trade popup (Forward test / Live) comes in the Trade phase');
+    // the same Trade popup as My Strategies' Trade
+    useLibrary.setState({ tradeFor: { id: useLibrary.getState().openId, name: st.name ?? 'Untitled strategy' } });
   };
+  const panel = useLibrary((s) => s.mode);
+  const { setMode } = useLibrary.getState();
 
   return (
     <header className="grid h-topbar shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(max-content,1fr)] items-center gap-4 border-b border-border-divider pr-5 pl-4">
@@ -42,9 +51,13 @@ export function TopNav() {
       <div className="flex min-w-0 items-center gap-2.5">
         <button
           type="button"
-          aria-label="Saved strategies"
-          title="Saved strategies"
-          className="flex size-8 shrink-0 items-center justify-center rounded-segment-item text-text-primary hover:bg-surface-selected"
+          aria-label="My Strategies"
+          title="My Strategies · hover to peek, click to pin"
+          aria-pressed={panel === 'pinned'}
+          // hover peeks, click pins (or closes a pinned panel)
+          onMouseEnter={() => panel === 'closed' && setMode('peek')}
+          onClick={() => setMode(panel === 'pinned' ? 'closed' : 'pinned')}
+          className={`flex size-8 shrink-0 items-center justify-center rounded-segment-item text-text-primary hover:bg-surface-selected focus-visible:shadow-focus-ring ${panel === 'pinned' ? 'bg-surface-selected' : ''}`}
         >
           <FolderIcon />
         </button>
@@ -68,7 +81,7 @@ export function TopNav() {
         {st.saveStatus === 'idle' && canSave && (
           <button
             type="button"
-            onClick={() => (st.saved ? onUpdate() : st.startNaming())}
+            onClick={onUpdate}
             className="h-[30px] shrink-0 rounded-segment-item border border-brand bg-surface px-3 text-body font-medium text-brand hover:bg-brand-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
             {st.saved ? 'Update' : 'Save'}
@@ -100,7 +113,7 @@ export function TopNav() {
         </button>
       </div>
 
-      <TradeDialogs open={dialog} onClose={() => setDialog(null)} />
+      <TradeDialogs open={dialog} onClose={() => setDialog(null)} onSave={saveNow} />
     </header>
   );
 }
@@ -138,11 +151,17 @@ function ModeSwitch({ dot, locked }: { dot: boolean; locked: boolean }) {
 
 const PERIODS: Period[] = ['1M', '3M', '6M', '1Y', '3Y'];
 
-/** Quiet text button. Locks while a backtest runs. The "Period" label drops in narrow windows. */
+/** Quiet text button. Locks while a backtest runs. The "Period" label drops when the window or the builder is narrow. */
 function PeriodMenu({ locked }: { locked: boolean }) {
   const period = useWorkspace((s) => s.period);
   const setPeriod = useWorkspace((s) => s.setPeriod);
   const [open, setOpen] = useState(false);
+  // "Change period" on an empty backtest result opens this menu
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener('open-period-menu', show);
+    return () => window.removeEventListener('open-period-menu', show);
+  }, []);
   return (
     <Popover
       open={open}
@@ -159,7 +178,7 @@ function PeriodMenu({ locked }: { locked: boolean }) {
             open ? 'bg-surface-selected' : 'enabled:hover:bg-surface-selected'
           }`}
         >
-          <span className="max-[1380px]:hidden">Period</span>
+          <span className="@max-[980px]:hidden max-[1380px]:hidden">Period</span>
           <b className="font-semibold text-text-primary">{period}</b>
           <ChevronDownIcon size={12} />
         </button>

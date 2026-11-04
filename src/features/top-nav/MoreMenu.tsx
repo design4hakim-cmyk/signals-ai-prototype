@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Popover } from '@/components/ui/Popover';
+import { RemembersItemMark, RemembersPanel } from '@/features/copilot/Remembers';
+import { useLibrary } from '@/store/library';
 import { useStrategy } from '@/store/strategy';
 
 /*
@@ -14,9 +16,12 @@ export function MoreMenu({ trading }: { trading: boolean }) {
   const st = useStrategy();
   const [open, setOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [remembers, setRemembers] = useState(false);
+  const openId = useLibrary((l) => l.openId);
   const close = () => {
     setOpen(false);
     setMoveOpen(false);
+    setRemembers(false);
   };
 
   return (
@@ -37,7 +42,18 @@ export function MoreMenu({ trading }: { trading: boolean }) {
         </button>
       }
     >
+      {remembers && openId ? (
+        <RemembersPanel strategyId={openId} name={st.name ?? 'this strategy'} />
+      ) : (
       <div role="menu" aria-label="Strategy actions" className="flex w-[240px] flex-col rounded-block border border-border-control bg-surface p-1.5 shadow-popover">
+        {openId && (
+          <>
+            <Item onClick={() => setRemembers(true)}>
+              <span className="flex w-full items-center justify-between">What Copilot remembers <RemembersItemMark /></span>
+            </Item>
+            <div className="my-1 h-px bg-border-subtle" />
+          </>
+        )}
         <Item onClick={() => { close(); st.showToast('Click the name to rename it'); }}>Rename</Item>
         <Item
           onClick={() => {
@@ -78,6 +94,7 @@ export function MoreMenu({ trading }: { trading: boolean }) {
           Delete strategy
         </Item>
       </div>
+      )}
     </Popover>
   );
 }

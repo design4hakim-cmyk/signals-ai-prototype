@@ -19,15 +19,17 @@ Hakim, lead product designer. **Not a developer.**
 Canvas artifact **"Signals AI · All flows"**: https://claude.ai/artifact/6vqCncptxzd5mdqLviriWT
 - Read its **Read me** notes first (in `project/canvas.json` → `notes`: `readme`, `rm0`–`rm4`).
 - Board prefixes: `ST-` strategies & trade · `CP-` Copilot · `PN-` Pine panel · `BT-` backtest · `K` context + bottom bar · `U` update chart · `B`/`E` canvas builder.
-- Component sheets (the spec for shared parts): `TopNav-Components`, `K12-bottom-bar-states`, `SetupBlock-Unified`, `Builder-Atoms`, `Builder-Atoms-2`, `Builder-Behaviour`, `Builder-Behaviour-2`, `ST-Components`, `ST-Behaviour`, `BT-Results`, `BT-Results-States`.
+- Component sheets (the spec for shared parts): `TopNav-Components`, `K12-bottom-bar-states`, `SetupBlock-Unified`, `Builder-Atoms`, `Builder-Atoms-2`, `Builder-Behaviour`, `Builder-Behaviour-2`, `ST-Components`, `ST-Behaviour`, `BT-Results`, `BT-Results-States`, `CP-Components`, `CP-Components-2`, `CP-Flows`, `CP-Flows-2`, `CP-Build-Fixes`, `PN-Components`, `PN-Components-2`, `PN-Flows`, `PN-Flows-2`, `PN-Errors`, `CP-Conversations`.
 - **Canvas builder kit: `design/canvas-builder/`.** Read `COMPONENTS.md` there before any canvas builder work. It is the written spec for the `Builder-Atoms` and `Builder-Behaviour` sheets, with reference images and a token mapping. It supersedes the older `B`/`E` boards where they differ (e.g. All of / Any of / None of instead of AND/OR, checkbox selection instead of ⋯ → Select). **Key rule: every canvas element has two layers — its own look (grey / red error / violet Copilot / dashed empty) and a separate Figma-like editor layer of blue rings outside the border (hover, pressed, selected, focus, drop target). Interaction never changes the element's own fill or border. Preview mode hides the editor layer.**
 - **My Strategies panel kit: `design/strategies-panel/`.** Read `COMPONENTS.md` there before any work on the saved-strategies side panel. It supersedes `ST-S03`–`ST-S12` where they differ (no dates, no Draft chip, Live / FT counts, Trade on hover, rename, delete).
 - **Backtest results kit: `design/backtest-results/`.** Read `COMPONENTS.md` there before any work on the backtest results area. It grows the existing `ResultsPanel` into the full results page (headline numbers, equity + drawdown chart, year-wise heatmap, grouped statistics, robustness checks, trades table) and comes with `mock-results.json`.
+- **Copilot kit: `design/copilot/`.** Read `COMPONENTS.md` there before any Copilot work. It supersedes the `CP-*` boards where they differ (one AI card that changes state in place, violet only for what Copilot made, outlined-blue card actions, review before changing user blocks, fit decided before building). **`design/copilot/FIXES.md` lists what the current build gets wrong; fix those first.** Chat history and how chats map to strategies: `design/copilot/CONVERSATIONS.md` (decided 4 Nov: a chat belongs to one strategy; reopening a strategy opens its last chat; the clock icon is chat history, there is no strategy version history).
+- **Pine Script editor kit: `design/pine-editor/`.** Read `COMPONENTS.md` there before any Pine Script work. Pine Script is the source; the canvas and chart are views of the last code that ran. It stays inside the Copilot panel (Pine Script view). Canvas edits patch code silently; code edits reach the canvas only on Run; Discard throws away only what hasn't run; no bars or toasts, a status line instead. It supersedes the `PN-*` boards and the read-only Pine view.
 - "Parking" boards are superseded. Ignore them.
 - Boards can be 100–150 KB. Don't read them raw: save the HTML, then run `python3 -I scripts/board-outline.py <file.html>` to get text + key styles. List the unique text first; it contains the designer's annotations.
 
 ## Non-negotiable design rules
-- **Brand blue `#0782DA`.** Violet is reserved for **Copilot provenance only** (✦ badge + violet on things Copilot added or changed), never for hover, focus or decoration (decided 2 Nov after the design-system review; this replaces the earlier "no purple" rule). Update `--color-ai-*` in `tokens.css` to the violet set in `design/canvas-builder/atom-states.ts` when you next touch Copilot UI.
+- **Brand blue `#0782DA`.** Violet is reserved for **Copilot provenance only** (✦ badge + violet on things Copilot added or changed), never for hover, focus or decoration (decided 2 Nov after the design-system review; this replaces the earlier "no purple" rule). `--color-ai-*` in `tokens.css` is the violet set.
 - **One filled-blue button on screen at a time.** Secondary = outlined blue. Navigation = segmented control (never filled blue).
 - BUY = green, SELL = red. Used only on numbers, markers and position chips.
 - Plain language in UI copy. Same components everywhere.
@@ -49,15 +51,19 @@ src/
   features/
     top-nav/               TopNav-Components sheet
     context-bar/           K01–K10 (instrument, chart data dialog, timeframe)
-    canvas/                strategy canvas (static preview until the builder phase)
+    canvas/                the real canvas, built only from kit/ parts: StrategyCanvas (camera, frames, drag), CanvasTree (rows, groups), CanvasBlock (fields + popovers)
+    canvas/kit/            canvas builder components from design/canvas-builder (Storybook: "Canvas builder/…").
+                           All rings come from kit/editorRing.ts — never compute a ring anywhere else.
     bottom-bar/            K11–K12 (chart/signals tabs, update chart, log, limits)
     chart/PriceChart.tsx   Lightweight Charts wrapper (+ entry/exit markers)
-    backtest/              SetupBlock-Unified sheet
-    copilot/               Copilot panel
-    scenarios/             ◐ Scenarios switcher. PROTOTYPE ONLY review helper
-  store/                   Zustand stores: workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups)
-  mock/                    dummy data: seeded candles, instruments, Copilot starters
-  lib/                     pure logic: signals (EMA 9×21 + limits), describeChartData
+    backtest/              SetupBlock-Unified sheet; results/ = the full results page (design/backtest-results), grown from ResultsPanel
+    copilot/               Copilot panel (design/copilot): parts (atoms), Cards (the one AI card, every state), History (chat history),
+                           Remembers (strategy notes), CopilotPanel, PineView (the Pine Script editor) + pine/ (CodeMirror editor, language)
+    strategies/            My Strategies panel (design/strategies-panel): parts, rows, menus, StrategiesPanel; stories in strategies/stories
+    trade/                 the one Trade popup (top nav Trade, panel Trade, ⋯ → Trade…). Placeholder until phase 7
+  store/                   Zustand stores: canvas (conditions, selection, undo, camera), library (saved strategies, panel), workspace (chart + context), strategy (lifecycle, trades, mode), backtest (setups), results (how the results page is viewed: VIX filter, sort, Monte Carlo), copilot (scripted chat; chats per strategy, notes; previews and pending changes live in canvas), pine (draft vs last run, status, AI fixes, drafts per strategy)
+  mock/                    dummy data: seeded candles, instruments, example + saved strategies, Copilot starters, chats (seeded Copilot chats + notes), pine (demo scripts for ⋯ → Load example)
+  lib/                     pure logic: indicators, conditions (tree edits, 2-level depth, dissolve), signals (evaluates the tree + limits), describeChartData, backtestData (results maths from mock-results.json), pine (canvas → code), pineParse (code → canvas, problems), pineMap (source map, id reconcile), lineDiff (patching, merge). `npm test` runs the round-trip tests
 ```
 
 ## Behaviour already decided (keep consistent)
@@ -67,12 +73,12 @@ src/
 - Run status and saved status never share a button (Run lives in the tab row, Save/Update setup in the header).
 - Perpetual Future is crypto-only (disabled for indices with "Only for crypto").
 - Mock data is seeded: same inputs → same chart and results.
-- Add new review states to `features/scenarios/ScenarioPanel.tsx`, since many states can't be reached by clicking until the canvas builder exists.
+- No Scenarios switcher (Hakim removed it on 3 Nov): every state must be reachable by clicking through the real flow. Storybook shows component states.
 
 ## Workflow
 1. Never commit to `main` directly. Create a branch (lowercase-with-hyphens, e.g. `phase-2-canvas-builder`), or keep adding to the open review branch if Hakim says so.
 2. Small, named commits. End commit messages with the attribution lines your harness provides.
-3. Push, then open or update the PR with: what's in it, **design decisions to review**, and how to review (preview link + which Scenarios to try).
+3. Push, then open or update the PR with: what's in it, **design decisions to review**, and how to review (preview link + what to click).
 4. Hakim reviews on the Vercel preview and merges. Don't merge for him unless asked.
 5. **Only touch this repo.** Never push to his other repos (e.g. `Portfolio-website-V2`, `hakimsingh`).
 
@@ -84,6 +90,7 @@ npm install            # once, and after adding libraries
 npm run dev            # app at http://localhost:5173 (live reload)
 npm run build          # type-check + production build
 npm run storybook      # components at http://localhost:6006
+                       # (also published with every Vercel preview at <preview-url>/storybook/)
 npx oxlint src         # lint
 ```
 
@@ -91,10 +98,10 @@ npx oxlint src         # lint
 - ✅ 0 · Setup, tokens, first page (ST-Main)
 - ✅ 1 · Context bar (K01–K10)
 - ✅ 1.5 · Top nav, bottom bar, backtest setup block (component sheets)
-- ⬜ 2 · Canvas builder by hand: build from `design/canvas-builder/COMPONENTS.md` (atoms, blocks, All of / Any of / None of groups, checkbox selection, menus, drag with dnd-kit). B02–B08 and E01–E09 show the flow; the kit wins where they differ.
-- ⬜ 3 · Copilot flow (CP-*: understood → question → building → applied; refine; edge cases)
-- ⬜ 4 · Pine Script panel (PN-*: errors fixed in place)
+- ✅ 2 · Canvas builder by hand: build from `design/canvas-builder/COMPONENTS.md` (atoms, blocks, All of / Any of / None of groups, checkbox selection, menus, drag with dnd-kit). B02–B08 and E01–E09 show the flow; the kit wins where they differ.
+- ✅ 3 · Copilot flow: build from `design/copilot/COMPONENTS.md` (understood → question → building → applied; refine and sync; edge cases). CP-* boards keep the copy; the kit wins where they differ.
+- ✅ 4 · Pine Script editor: build from `design/pine-editor/COMPONENTS.md` (real code editor, two-way sync with the canvas, session Discard, errors fixed in place with AI, code the canvas can't draw). First apply `design/copilot/FIXES.md`.
 - ⬜ 5 · Update chart flow polish (U01–U06)
 - ⬜ 6 · Backtest screens (BT-*) + saved setups as tabs. Results area: build from `design/backtest-results/COMPONENTS.md`.
 - ⬜ 7 · Go live safely (ST-S14–S22: forward test first, then live)
-- ⬜ 8 · My Strategies panel: build from `design/strategies-panel/COMPONENTS.md` (ST-S03–S12 show the flow; the kit wins where they differ)
+- ✅ 8 · My Strategies panel: build from `design/strategies-panel/COMPONENTS.md` (ST-S03–S12 show the flow; the kit wins where they differ)
