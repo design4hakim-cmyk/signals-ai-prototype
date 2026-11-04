@@ -3,9 +3,11 @@ import { describeCondition, findNode, flatConditions, removeNodes, replaceNode, 
 import { computeSignals } from '@/lib/signals';
 import { generateSeries } from '@/mock/candles';
 import {
-  EXIT_OPTIONS, exitFor, mainEntry, matchScript, partlyFitsEntry, rsiExit, simplifiedEntry, TIMING, VAGUE_OPTIONS, volumeFilter, vwapEntry, WHY_ANSWER,
+  EXIT_OPTIONS, exitFor, mainEntry, matchScript, partlyFitsEntry, rsiExit, simplifiedEntry, TIMING, VAGUE_OPTIONS, volumeFilter, vwapEntry, WHY_ANSWER, STOP_LOSS_ANSWER,
 } from '@/mock/copilot';
-import type { Condition, Side } from '@/types/strategy';
+import { seedChats, seedNotes } from '@/mock/chats';
+import type { Condition, Operand, Side, StrategyTree } from '@/types/strategy';
+import { sameTree } from '@/lib/pineParse';
 import { useBacktest } from './backtest';
 import { useCanvas } from './canvas';
 import { usePine } from './pine';
@@ -45,12 +47,42 @@ export type Card =
   | { kind: 'codeOnly'; id: string }
   | { kind: 'failed'; id: string; phase: 'thinking' | 'failed' | 'skipped'; detailsOpen: boolean; mark: number; entryCount: number }
   | { kind: 'vague'; id: string; chosen: number | null }
-  | { kind: 'note'; id: string; text: string };
+  | { kind: 'note'; id: string; text: string }
+  /** an answer with a headline (seeded chats: "March: 4 losing trades in a row") */
+  | { kind: 'answer'; id: string; title: string; sub?: string; text: string }
+  /** after about 50 turns: start a fresh chat or keep going */
+  | { kind: 'long'; id: string; dismissed?: boolean };
 
-export type Message = { kind: 'user'; id: string; text: string } | { kind: 'card'; id: string; card: Card };
+/**
+ * `record`: the card is from an older chat, so it's read-only with a date chip ("Applied · 2 Nov").
+ * `live`: one note at the end of an older chat when the strategy changed since.
+ */
+export type Message =
+  | { kind: 'user'; id: string; text: string; at?: number }
+  | { kind: 'card'; id: string; card: Card; at?: number; record?: string }
+  | { kind: 'live'; id: string; text: string };
+
+/** A chat belongs to one strategy (design/copilot/CONVERSATIONS.md). null = No strategy. */
+export interface Chat {
+  id: string;
+  strategyId: string | null;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: Message[];
+  /** the strategy as it was at the chat's last card, for the live note */
+  snapshot: StrategyTree | null;
+}
 
 interface CopilotState {
+  /** the open chat's thread */
   messages: Message[];
+  chats: Chat[];
+  activeChatId: string | null;
+  /** the strategy the builder has open: a saved id, an untitled key, or null (empty workspace) */
+  strategyId: string | null;
+  /** what Copilot remembers, per strategy */
+  notes: Record<string, string[]>;
   view: 'chat' | 'pine';
   listening: boolean;
   /** a reply is on its way (the ✦ … indicator) */
@@ -76,6 +108,19 @@ interface CopilotState {
   setView: (v: 'chat' | 'pine') => void;
   openLine: (line: number) => void;
   newChat: () => void;
+  /** the builder opened this strategy: its last chat, scrolled to the end, or its empty state */
+  openStrategy: (strategyId: string | null) => void;
+  openChat: (chatId: string) => void;
+  renameChat: (chatId: string, title: string) => void;
+  deleteChat: (chatId: string) => void;
+  /** Delete strategy: its chats and notes go too */
+  forgetStrategy: (strategyId: string) => void;
+  /** Duplicate: notes are copied (not the chats), and the copy knows where it came from */
+  copyNotes: (from: string, to: string, fromName: string) => void;
+  addNote: (strategyId: string, text: string) => void;
+  removeNote: (strategyId: string, index: number) => void;
+  clearNotes: (strategyId: string) => void;
+  keepGoing: (cardId: string) => void;
   set: (p: Partial<CopilotState>) => void;
 }
 
@@ -84,6 +129,7 @@ interface CopilotState {
 const C = () => useCanvas.getState();
 const tree = () => ({ entry: C().entry, exit: C().exit });
 let timers: ReturnType<typeof setTimeout>[] = [];
+let opening = false;
 const later = (ms: number, f: () => void) => timers.push(setTimeout(f, ms));
 const stopTimers = () => {
   timers.forEach(clearTimeout);
@@ -134,8 +180,43 @@ function chatReply(t: string): string {
   return `I can build entries and exits from a plain description, change blocks you made, or explain an indicator. ${state} What should it do?`;
 }
 
+/* ── chats ─────────────────────────────────────────────────────── */
+
+const shortDate = (t: number) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+
+/** The date chip on a card in an older chat. */
+function recordLabel(c: Card, at: number): string {
+  const d = shortDate(at);
+  if (c.kind === 'note' || c.kind === 'answer' || c.kind === 'vague' || c.kind === 'long') return `Answered · ${d}`;
+  if (c.kind === 'review' && c.phase !== 'applied') return `Not applied · ${d}`;
+  if (c.kind === 'fit' && c.phase === 'check') return `Not applied · ${d}`;
+  if (c.kind === 'failed' && c.phase !== 'skipped') return `Partly applied · ${d}`;
+  return `Applied · ${d}`;
+}
+
+const shortName = (o: Operand | null) =>
+  !o ? '' : o.type === 'number' ? String(o.value) : o.id === 'sma' ? (o.params.source === 'Volume' ? 'volume average' : `MA ${o.params.length}`) : o.id === 'ema' ? `EMA ${o.params.length}` : o.id === 'price' ? 'Close' : o.id.toUpperCase();
+
+/** "Since this chat you changed RSI to 55 and removed the volume filter." */
+function liveNote(then: StrategyTree, now: StrategyTree): string {
+  const all = (t: StrategyTree) => [...flatConditions(t.entry), ...flatConditions(t.exit)];
+  const key = (c: Condition) => (c.custom ? c.custom.name : `${c.left?.type === 'indicator' ? c.left.id + c.left.params.length : c.left?.type}|${c.relation}|${c.right?.type === 'indicator' ? c.right.id : 'n'}`);
+  const label = (c: Condition) => (c.left?.type === 'indicator' && c.left.id === 'volume' ? 'the volume filter' : c.custom ? c.custom.text : `“${describeCondition(c)}”`);
+  const left = all(now);
+  const parts: string[] = [];
+  for (const o of all(then)) {
+    const i = left.findIndex((x) => key(x) === key(o));
+    if (i < 0) { parts.push(`removed ${label(o)}`); continue; }
+    const x = left.splice(i, 1)[0];
+    if (x.right?.type === 'number' && o.right?.type === 'number' && x.right.value !== o.right.value) parts.push(`changed ${shortName(o.left)} to ${x.right.value}`);
+  }
+  for (const x of left) parts.push(`added ${label(x)}`);
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0] ?? 'changed the strategy';
+  return `Since this chat you ${list}. I’m looking at the strategy as it is now.`;
+}
+
 export const useCopilot = create<CopilotState>((set, get) => {
-  const add = (m: Message) => set((s) => ({ messages: [...s.messages, m] }));
+  const add = (m: Message) => set((s) => ({ messages: [...s.messages, m.kind === 'live' ? m : { ...m, at: Date.now() }] }));
   const card = (c: Card) => {
     set({ typing: false });
     add({ kind: 'card', id: c.id, card: c });
@@ -236,6 +317,10 @@ export const useCopilot = create<CopilotState>((set, get) => {
 
   return {
     messages: [],
+    chats: seedChats(),
+    activeChatId: null,
+    strategyId: null,
+    notes: seedNotes(),
     view: 'chat',
     pineBase: null,
     pineNote: '',
@@ -264,6 +349,10 @@ export const useCopilot = create<CopilotState>((set, get) => {
           return later(TIMING.understood, () => card({ kind: 'note', id, text: chatReply(t) }));
         case 'why':
           return later(TIMING.understood, () => card({ kind: 'note', id, text: WHY_ANSWER }));
+        case 'march':
+          return later(TIMING.understood, () => card({ kind: 'answer', id, title: 'March: 4 losing trades in a row', sub: `${strategyName()} · ${useWorkspace.getState().instrument}`, text: 'Three entries fired on gap-downs after 09:15. A 09:30 start time would have skipped them.' }));
+        case 'stopLoss':
+          return later(TIMING.understood, () => card({ kind: 'note', id, text: STOP_LOSS_ANSWER }));
         case 'exit': {
           const entry = flatConditions(C().entry);
           if (!entry.length) return later(TIMING.understood, () => card({ kind: 'note', id, text: 'There’s no entry yet, so there’s nothing to exit from. Describe when to buy first, for example “Buy when EMA 9 crosses above EMA 21”.' }));
@@ -468,10 +557,75 @@ export const useCopilot = create<CopilotState>((set, get) => {
       stopTimers();
       C().set({ copilotPreview: null, pending: null });
       if (get().view === 'pine') usePine.getState().closeEditor();
-      set({ messages: [], view: 'chat', typing: false });
+      // the chat itself is made with its first message
+      set({ messages: [], activeChatId: null, view: 'chat', typing: false });
     },
+
+    openStrategy: (strategyId) => {
+      set({ strategyId });
+      const last = get().chats.filter((c) => c.strategyId === strategyId && strategyId !== null).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      if (last) get().openChat(last.id);
+      else get().newChat();
+    },
+    openChat: (chatId) => {
+      const c = get().chats.find((x) => x.id === chatId);
+      if (!c) return;
+      stopTimers();
+      C().set({ copilotPreview: null, pending: null });
+      if (get().view === 'pine') usePine.getState().closeEditor();
+      // older cards are records: no actions, a date chip instead
+      const messages: Message[] = c.messages.filter((m) => m.kind !== 'live').map((m) => (m.kind === 'card' && !m.record && m.card.kind !== 'long' ? { ...m, record: recordLabel(m.card, m.at ?? c.updatedAt) } : m));
+      // the strategy moved on since: one live note, added on open
+      if (c.strategyId !== null && c.strategyId === get().strategyId && c.snapshot) {
+        const now = tree();
+        if (!sameTree(c.snapshot, now)) messages.push({ kind: 'live', id: uid('live'), text: liveNote(c.snapshot, now) });
+      }
+      opening = true; // opening a chat isn't an update to it
+      set({ activeChatId: c.id, messages, view: 'chat', typing: false });
+      opening = false;
+    },
+    renameChat: (chatId, title) => set((s) => ({ chats: s.chats.map((c) => (c.id === chatId ? { ...c, title: title.trim() || c.title } : c)) })),
+    deleteChat: (chatId) => {
+      set((s) => ({ chats: s.chats.filter((c) => c.id !== chatId) }));
+      if (get().activeChatId === chatId) get().newChat();
+    },
+    forgetStrategy: (strategyId) =>
+      set((s) => {
+        const notes = { ...s.notes };
+        delete notes[strategyId];
+        return { chats: s.chats.filter((c) => c.strategyId !== strategyId), notes };
+      }),
+    copyNotes: (from, to, fromName) => set((s) => ({ notes: { ...s.notes, [to]: [`Copied from ${fromName}.`, ...(s.notes[from] ?? [])] } })),
+    addNote: (sid, text) => text.trim() && set((s) => ({ notes: { ...s.notes, [sid]: [...(s.notes[sid] ?? []), text.trim()] } })),
+    removeNote: (sid, i) => set((s) => ({ notes: { ...s.notes, [sid]: (s.notes[sid] ?? []).filter((_, k) => k !== i) } })),
+    clearNotes: (sid) => set((s) => ({ notes: { ...s.notes, [sid]: [] } })),
+    keepGoing: (cardId) => patch(cardId, { dismissed: true } as Partial<Card>),
     set: (p) => set(p),
   };
 });
 
 export { EXIT_OPTIONS, VAGUE_OPTIONS };
+
+/* Keep the open chat in the chat list: made on its first message, titled from it; its snapshot
+   follows the strategy; a long thread gets the "getting long" card once. */
+useCopilot.subscribe((s, prev) => {
+  if (s.messages === prev.messages || !s.messages.length || opening) return;
+  const now = Date.now();
+  const snapshot = { entry: useCanvas.getState().entry, exit: useCanvas.getState().exit };
+  const turns = s.messages.filter((m) => m.kind === 'user').length;
+  if (turns >= 50 && !s.messages.some((m) => m.kind === 'card' && m.card.kind === 'long')) {
+    const card: Card = { kind: 'long', id: uid('long') };
+    queueMicrotask(() => useCopilot.setState((x) => ({ messages: [...x.messages, { kind: 'card', id: card.id, card, at: now }] })));
+  }
+  const active = s.chats.find((c) => c.id === s.activeChatId);
+  // someone else's strategy's chat is read-only: nothing to write back
+  if (active && active.strategyId !== s.strategyId) return;
+  if (!active) {
+    const first = s.messages.find((m) => m.kind === 'user');
+    if (!first || first.kind !== 'user') return;
+    const chat: Chat = { id: uid('chat'), strategyId: s.strategyId, title: first.text.length > 42 ? `${first.text.slice(0, 40).trim()}…` : first.text, createdAt: now, updatedAt: now, messages: s.messages, snapshot };
+    useCopilot.setState({ chats: [chat, ...s.chats], activeChatId: chat.id });
+    return;
+  }
+  useCopilot.setState({ chats: s.chats.map((c) => (c.id === active.id ? { ...c, messages: s.messages, updatedAt: now, snapshot } : c)) });
+});

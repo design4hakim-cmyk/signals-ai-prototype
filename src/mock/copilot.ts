@@ -16,7 +16,7 @@ export const copilotStarters: CopilotStarter[] = [
 
 export const mockUser = { firstName: 'Hakim' };
 
-export type ScriptId = 'chat' | 'why' | 'exit' | 'main' | 'refineAdd' | 'review' | 'partlyFits' | 'codeOnly' | 'failed' | 'vague';
+export type ScriptId = 'chat' | 'march' | 'stopLoss' | 'why' | 'exit' | 'main' | 'refineAdd' | 'review' | 'partlyFits' | 'codeOnly' | 'failed' | 'vague';
 
 /**
  * Which scripted reply a prompt gets. Plain questions and small talk get a text answer;
@@ -25,6 +25,8 @@ export type ScriptId = 'chat' | 'why' | 'exit' | 'main' | 'refineAdd' | 'review'
 export function matchScript(text: string): { id: ScriptId; entry?: () => Condition[] } {
   const t = text.toLowerCase().trim();
   if (/profitab|make me money|best strategy|guaranteed/.test(t)) return { id: 'vague' };
+  if (/march/.test(t) && /lose|loss|lost|bad/.test(t)) return { id: 'march' };
+  if (/stop.?loss/.test(t)) return { id: 'stopLoss' };
   if (/why no trade|why didn.t|why did(n.t)? it not/.test(t)) return { id: 'why' };
   if (/at least once in the last/.test(t)) return { id: 'partlyFits' };
   if (/re-?arm/.test(t)) return { id: 'codeOnly' };
@@ -114,6 +116,8 @@ export const vwapEntry = () => [
 export const NEXT_STEPS = ['Looks right · Run backtest', 'Fewer signals, please', 'Why no trade on 15 Mar?'];
 
 export const WHY_ANSWER = 'On 15 Mar, EMA 9 stayed below EMA 21 all day, so the entry never fired. Check on chart to see that day.';
+
+export const STOP_LOSS_ANSWER = 'Stop losses live in the Backtest setup, so every setup can have its own. Open the Backtest tab and set “Stop loss per trade”; the entry and exit stay as they are.';
 
 /** Fake timing (ms). */
 export const TIMING = { understood: 600, place: 500 };

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { describeCondition, flatConditions } from '@/lib/conditions';
 import { exitFor, NEXT_STEPS } from '@/mock/copilot';
 import { lineOfVar } from '@/lib/pine';
@@ -105,7 +105,21 @@ function Understood({ entry, exit, logic = 'ALL OF', children }: { entry: Condit
 
 /* ── Card shell and its parts ──────────────────────────────────── */
 
+/**
+ * A card in an older chat is a record (design/copilot/CONVERSATIONS.md): its actions are removed
+ * and a date chip sits on the right of the header ("Applied · 2 Nov").
+ */
+const RecordContext = createContext<string | null>(null);
+const DateChip = ({ children }: { children: ReactNode }) => (
+  <span className="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-[5px] bg-surface-selected px-1.5 text-[11px] font-medium text-text-secondary">{children}</span>
+);
+
 function Shell({ icon, title, sub, badge, error, children, footer }: { icon: ReactNode; title: ReactNode; sub?: ReactNode; badge?: ReactNode; error?: boolean; children?: ReactNode; footer?: ReactNode }) {
+  const record = useContext(RecordContext);
+  if (record) {
+    badge = <DateChip>{record}</DateChip>;
+    footer = undefined;
+  }
   return (
     <article className={`flex flex-col overflow-hidden rounded-card border bg-surface ${error ? 'border-error-card' : 'border-border-control'}`}>
       <header className="flex items-center gap-2 px-3 py-2.5 text-body font-semibold">
@@ -140,6 +154,8 @@ function AddedFooter({ onUndo, note = 'Pine Script updated', link = 'View code',
 function Proof({ entries, exits, beforeEntries, note }: { entries: number; exits?: number; beforeEntries?: number; note?: string }) {
   const period = useWorkspace((s) => s.period);
   const checkOnChart = useCopilot((s) => s.checkOnChart);
+  // a record keeps what it did, not the live numbers
+  if (useContext(RecordContext)) return null;
   return (
     <div className="mx-3 mt-1.5 mb-3 flex animate-fade-in items-center gap-2.5 rounded-lg bg-surface-hover px-3 py-2.5">
       <div className="flex flex-1 flex-col gap-0.5">
@@ -158,7 +174,7 @@ const Strip = ({ children, className = 'mt-1 mb-2.5' }: { children: ReactNode; c
 );
 
 /** The question box (grey inset with answer options). */
-const Question = ({ title, children }: { title: string; children: ReactNode }) => (
+const Question = ({ title, children }: { title: string; children: ReactNode }) => useContext(RecordContext) ? null : (
   <div className="mx-3 mt-1 mb-3 flex animate-fade-in flex-col gap-2 rounded-[10px] bg-surface-hover p-3">
     <span className="text-body font-medium text-text-primary">{title}</span>
     {children}
@@ -167,7 +183,15 @@ const Question = ({ title, children }: { title: string; children: ReactNode }) =
 
 /* ── One card, any state ───────────────────────────────────────── */
 
-export function CopilotCard({ card, last }: { card: Card; last: boolean }) {
+export function CopilotCard({ card, last, record }: { card: Card; last: boolean; record?: string }) {
+  return (
+    <RecordContext.Provider value={record ?? null}>
+      <CardBody card={card} last={last && !record} />
+    </RecordContext.Provider>
+  );
+}
+
+function CardBody({ card, last }: { card: Card; last: boolean }) {
   const cp = useCopilot();
   const period = useWorkspace((s) => s.period);
   // where the custom logic sits in the code right now
@@ -237,7 +261,7 @@ export function CopilotCard({ card, last }: { card: Card; last: boolean }) {
 
     case 'refineAdd':
       return (
-        <Shell icon={<StatusIcon kind="done" />} title={`Added 1 condition to ${card.side === 'exit' ? 'Exit' : 'Entry'}`} footer={<AddedFooter onUndo={() => cp.undo(card.id)} />}>
+        <Shell icon={<StatusIcon kind="done" />} title={`Added 1 condition to ${card.side === 'exit' ? 'Exit' : 'Entry'}`} sub={card.added.left && card.added.right ? `${word(card.added.left)} ${RELATION_WORDS[card.added.relation ?? 'Greater Than']} ${word(card.added.right)}` : undefined} footer={<AddedFooter onUndo={() => cp.undo(card.id)} />}>
           <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 text-chip text-text-secondary"><DiffMark kind="added" /><Chips c={card.added} /></div>
           <Proof entries={card.after.entries} exits={card.side === 'exit' ? card.after.exits : undefined} beforeEntries={card.before.entries} note={card.after.entries < card.before.entries ? `Volume filter removed ${card.before.entries - card.after.entries} weak signal${card.before.entries - card.after.entries > 1 ? 's' : ''}` : undefined} />
         </Shell>
@@ -353,6 +377,20 @@ export function CopilotCard({ card, last }: { card: Card; last: boolean }) {
 
     case 'note':
       return <TextReply text={card.text} />;
+
+    case 'answer':
+      return (
+        <Shell icon={<StatusIcon kind="done" />} title={card.title} sub={card.sub}>
+          <p className="m-0 px-3 pb-3 text-chip leading-[18px] text-text-secondary">{card.text}</p>
+        </Shell>
+      );
+
+    // after about 50 turns: a fresh chat stays quick
+    case 'long':
+      if (card.dismissed) return null;
+      return (
+        <Shell icon={<Spark />} title="This chat is getting long" sub="A fresh chat stays quick. I’ll keep what we decided." footer={<><CardAction onClick={cp.newChat}>Start a fresh chat</CardAction><Secondary onClick={() => cp.keepGoing(card.id)}>Keep going</Secondary></>} />
+      );
   }
 }
 
@@ -374,7 +412,8 @@ export function Thinking({ text }: { text?: string }) {
 /** The answer streams in word by word, then stays put. */
 function TextReply({ text }: { text: string }) {
   const words = text.split(' ');
-  const [shown, setShown] = useState(1);
+  // an older chat's answer is already written
+  const [shown, setShown] = useState(useContext(RecordContext) ? words.length : 1);
   useEffect(() => {
     if (shown >= words.length) return;
     const t = setTimeout(() => setShown((n) => n + 1), 28);

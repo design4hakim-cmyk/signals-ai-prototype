@@ -1,15 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, IconButton } from '@/components/ui/Button';
-import { ArrowIcon, HistoryIcon, MicIcon, PlusIcon } from '@/components/ui/icons';
+import { ArrowIcon, MicIcon, PlusIcon } from '@/components/ui/icons';
 import { copilotTake, kiloRupees, resultsView, variantFor } from '@/lib/backtestData';
 import { copilotStarters, mockUser } from '@/mock/copilot';
 import { useBacktest } from '@/store/backtest';
 import { useCopilot } from '@/store/copilot';
+import { useLibrary } from '@/store/library';
+import { ChatHistory } from './History';
+import { strategyLabel } from './strategyLabel';
 import { usePine } from '@/store/pine';
 import { useStrategy } from '@/store/strategy';
 import { CopilotCard, Thinking } from './Cards';
-import { CodeGlyph, Secondary, Spark, UserBubble } from './parts';
+import { CardAction, CodeGlyph, Secondary, Spark, UserBubble } from './parts';
 import { PineView } from './PineView';
+
+/** Starters for a saved strategy (design/copilot/CONVERSATIONS.md · Strategy empty state). */
+const SAVED_STARTERS = [
+  { title: 'Fewer signals, please', hint: 'Tighten the entry so it trades less.' },
+  { title: 'Add a stop loss', hint: 'Exit a losing trade at a set loss.' },
+  { title: 'Why did March lose money?', hint: 'Explain the worst month in the backtest.' },
+];
 
 /** Right panel: Signals Copilot (design/copilot · Panel). 440px wide. */
 export function CopilotPanel() {
@@ -23,6 +33,11 @@ export function CopilotPanel() {
   const thread = useRef<HTMLDivElement>(null);
   const hasThread = messages.length > 0;
   const codeDraft = usePine((p) => p.draft);
+  const strategyId = useCopilot((s) => s.strategyId);
+  const activeChat = useCopilot((s) => s.chats.find((c) => c.id === s.activeChatId));
+  const saved = useLibrary((l) => l.strategies.find((x) => x.id === strategyId));
+  const otherChat = activeChat && activeChat.strategyId !== strategyId && activeChat.strategyId !== null ? activeChat : null;
+  const otherName = otherChat ? strategyLabel(otherChat.strategyId).name : '';
   const followRef = useRef<() => void>(() => {});
   const [secs, setSecs] = useState(0);
 
@@ -103,9 +118,7 @@ export function CopilotPanel() {
         <IconButton aria-label="New chat" onClick={() => { newChat(); setDraft(''); }}>
           <PlusIcon />
         </IconButton>
-        <IconButton aria-label="History">
-          <HistoryIcon />
-        </IconButton>
+        <ChatHistory />
       </div>
 
       {view === 'pine' ? (
@@ -116,7 +129,17 @@ export function CopilotPanel() {
           <div className="flex flex-col gap-3 px-4 pt-4 pb-3">
             {messages.map((m, i) => (
               <div key={m.id} className="flex shrink-0 animate-msg-in flex-col gap-3">
-                {m.kind === 'user' ? <UserBubble>{m.text}</UserBubble> : <CopilotCard card={m.card} last={i === messages.length - 1} />}
+                {m.kind === 'user' ? (
+                  <UserBubble>{m.text}</UserBubble>
+                ) : m.kind === 'live' ? (
+                  // the strategy moved on since this chat
+                  <div className="flex gap-2 rounded-[10px] bg-surface-hover px-3 py-2.5 text-chip leading-[18px] text-text-primary">
+                    <span className="pt-0.5"><Spark size={12} /></span>
+                    <span>{m.text}</span>
+                  </div>
+                ) : (
+                  <CopilotCard card={m.card} last={i === messages.length - 1 && !otherChat} record={m.record ?? (otherChat ? 'Answered' : undefined)} />
+                )}
               </div>
             ))}
             {typing && <Thinking />}
@@ -124,6 +147,24 @@ export function CopilotPanel() {
         </div>
       ) : ready ? (
         <BacktestReady name={ready.name} onAsk={setDraft} />
+      ) : saved ? (
+        // a saved strategy with no chats yet, or New chat (+): it knows the strategy
+        <div className="flex min-h-0 grow flex-col justify-center gap-5 overflow-auto px-[22px]">
+          <div className="flex flex-col items-center gap-1.5 text-center">
+            <p className="m-0 text-[20px] leading-[26px] font-semibold">What should we change in {saved.name}?</p>
+            <p className="m-0 text-body text-text-tertiary">I can see its blocks, code and last backtest.</p>
+          </div>
+          <ul className="m-0 list-none overflow-hidden rounded-card border border-border-divider p-0">
+            {SAVED_STARTERS.map((s) => (
+              <li key={s.title}>
+                <button type="button" onClick={() => send(s.title)} className="flex w-full flex-col gap-0.5 bg-surface px-4 py-3 text-left hover:bg-surface-canvas">
+                  <span className="text-body font-medium">{s.title}</span>
+                  <span className="text-label text-text-muted">{s.hint}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : (
         <div className="flex min-h-0 grow flex-col justify-center gap-5 overflow-auto px-[22px]">
           <div className="flex flex-col items-center gap-1.5 text-center">
@@ -143,7 +184,14 @@ export function CopilotPanel() {
         </div>
       )}
 
-      {view !== 'pine' && (
+      {view !== 'pine' && otherChat && (
+        // another strategy's chat is read-only: it can't change the wrong strategy
+        <div className="flex shrink-0 items-center gap-3 border-t border-border-divider px-4 py-3">
+          <span className="grow text-label text-text-secondary">This chat is about <b className="font-semibold text-text-primary">{otherName}</b>. Open it to keep going.</span>
+          <CardAction onClick={() => otherChat.strategyId && useLibrary.getState().openStrategy(otherChat.strategyId)}>Open {otherName}</CardAction>
+        </div>
+      )}
+      {view !== 'pine' && !otherChat && (
       <div className="shrink-0 px-4 pt-3 pb-2.5">
         <div className="flex flex-col gap-2 rounded-card border border-border-control bg-surface px-3 py-2.5 hover:border-border-strong focus-within:shadow-focus-ring">
           {listening ? (

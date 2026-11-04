@@ -38,6 +38,7 @@ export function RowMenu({
   onRename,
   onDuplicate,
   onDelete,
+  onRemembers,
 }: {
   /** live + forward tests running; > 0 blocks Delete */
   running?: number;
@@ -48,6 +49,8 @@ export function RowMenu({
   onRename?: () => void;
   onDuplicate?: () => void;
   onDelete?: () => void;
+  /** strategy notes Copilot keeps (design/copilot/CONVERSATIONS.md) */
+  onRemembers?: () => void;
 }) {
   return (
     // clicks inside the floating menu must not reach the row underneath (which would open the strategy)
@@ -55,6 +58,12 @@ export function RowMenu({
       <Row shortcut="↵" onClick={onOpen}>Open in builder</Row>
       <Row onClick={onTrade}>Trade…</Row>
       <Divider />
+      {onRemembers && (
+        <>
+          <Row shortcut="✦" onClick={onRemembers}>What Copilot remembers</Row>
+          <Divider />
+        </>
+      )}
       <Row shortcut="F2" hover={hoverRow === 'rename'} onClick={onRename}>Rename</Row>
       <Row shortcut="⌘D" onClick={onDuplicate}>Duplicate</Row>
       <Divider />
@@ -67,7 +76,7 @@ export function RowMenu({
   );
 }
 
-export function DeleteConfirm({ name, onCancel, onDelete }: { name: string; onCancel?: () => void; onDelete?: () => void }) {
+export function DeleteConfirm({ name, chats = 0, onCancel, onDelete }: { name: string; chats?: number; onCancel?: () => void; onDelete?: () => void }) {
   return (
     <div
       role="alertdialog"
@@ -76,7 +85,9 @@ export function DeleteConfirm({ name, onCancel, onDelete }: { name: string; onCa
       className="flex w-[250px] flex-col gap-2 rounded-control border border-border-control bg-surface p-4 shadow-surface"
     >
       <span className="text-body font-semibold">Delete “{name}”?</span>
-      <span className="text-label text-text-secondary">Its saved setups and backtest results go too. This can’t be undone.</span>
+      <span className="text-label text-text-secondary">
+        {chats ? <>Its saved setups, backtest results and <b className="font-semibold text-text-primary">{chats} Copilot chat{chats > 1 ? 's' : ''}</b> go too.</> : 'Its saved setups and backtest results go too.'} This can’t be undone.
+      </span>
       <div className="mt-1 flex justify-end gap-2">
         <button type="button" autoFocus onClick={onCancel} className="h-[30px] rounded-control border border-border-chip bg-surface px-3 text-body hover:bg-surface-hover active:bg-row-pressed focus-visible:shadow-focus-ring">
           Cancel

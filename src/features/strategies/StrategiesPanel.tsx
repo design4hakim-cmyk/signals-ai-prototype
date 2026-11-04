@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { FolderIcon } from '@/components/ui/icons';
 import { Popover } from '@/components/ui/Popover';
 import { INDEXES } from '@/mock/savedStrategies';
+import { RemembersPanel } from '@/features/copilot/Remembers';
+import { useCopilot } from '@/store/copilot';
 import { indexOrder, nameError, useLibrary } from '@/store/library';
 import { useStrategy } from '@/store/strategy';
 import { DeleteConfirm, RowMenu } from './menus';
@@ -163,6 +165,8 @@ function ConnectedRow({ id, symbol, moveFocus }: { id: string; symbol: string; m
   const renaming = useLibrary((st) => st.renamingId === id);
   const menuOpen = useLibrary((st) => st.menuId === id);
   const confirming = useLibrary((st) => st.confirmDeleteId === id);
+  const chats = useCopilot((st) => st.chats.filter((c) => c.strategyId === id).length);
+  const [remembers, setRemembers] = useState(false);
   const unsaved = useStrategy((st) => st.dirty);
   const { openStrategy, rename, duplicate, remove, set, toggleIndex } = useLibrary.getState();
   const [draft, setDraft] = useState(s.name);
@@ -237,14 +241,16 @@ function ConnectedRow({ id, symbol, moveFocus }: { id: string; symbol: string; m
           <Popover
             floating
             align="right"
-            open={menuOpen || confirming}
-            onClose={() => set({ menuId: null, confirmDeleteId: null })}
+            open={menuOpen || confirming || remembers}
+            onClose={() => { setRemembers(false); set({ menuId: null, confirmDeleteId: null }); }}
             trigger={<IconButton kind="more" label="More actions" open={menuOpen || confirming} onClick={() => set({ menuId: menuOpen || confirming ? null : id, confirmDeleteId: null })} />}
           >
-            {confirming ? (
-              <DeleteConfirm name={s.name} onCancel={() => set({ confirmDeleteId: null })} onDelete={() => remove(id)} />
+            {remembers ? (
+              <RemembersPanel strategyId={id} name={s.name} />
+            ) : confirming ? (
+              <DeleteConfirm name={s.name} chats={chats} onCancel={() => set({ confirmDeleteId: null })} onDelete={() => remove(id)} />
             ) : (
-              <RowMenu running={running} onOpen={() => openStrategy(id)} onTrade={trade} onRename={startRename} onDuplicate={() => duplicate(id)} onDelete={askDelete} />
+              <RowMenu running={running} onOpen={() => openStrategy(id)} onTrade={trade} onRename={startRename} onDuplicate={() => duplicate(id)} onDelete={askDelete} onRemembers={() => { setRemembers(true); set({ menuId: null }); }} />
             )}
           </Popover>
         </>

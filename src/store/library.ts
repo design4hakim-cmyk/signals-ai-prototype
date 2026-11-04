@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { INDEXES, SAVED_STRATEGIES, type SavedStrategy } from '@/mock/savedStrategies';
+import { emaNow } from '@/mock/chats';
 import { complexStrategy, demoStrategy, emptyStrategy, groupedStrategy } from '@/mock/strategies';
 import { useBacktest } from './backtest';
 import { useCanvas } from './canvas';
@@ -133,9 +134,11 @@ export const useLibrary = create<LibraryState>((set, get) => {
       });
       // its blocks go on the canvas, and its saved setups come with results already run
       const trees = [demoStrategy, groupedStrategy, complexStrategy];
-      useCopilot.getState().newChat();
       useCanvas.setState({ codeOnly: false });
-      useCanvas.getState().load(trees[Math.max(0, get().strategies.findIndex((x) => x.id === id)) % trees.length]());
+      // EMA 9/21 is the boards' strategy: RSI 55, volume filter dropped since its last chat
+      useCanvas.getState().load(id === 's-ema' ? emaNow() : trees[Math.max(0, get().strategies.findIndex((x) => x.id === id)) % trees.length]());
+      // Copilot opens this strategy's last chat, scrolled to the end (design/copilot/CONVERSATIONS.md)
+      useCopilot.getState().openStrategy(id);
       const bt = useBacktest.getState();
       bt.set({ setups: [], strategyChange: null, run: null });
       bt.addSaved(['saved-ss', 'saved-ic']);
@@ -145,7 +148,8 @@ export const useLibrary = create<LibraryState>((set, get) => {
     newStrategy: () => {
       set((st) => ({ openId: null, mode: st.mode === 'peek' ? 'closed' : st.mode }));
       useStrategy.setState({ ...useStrategy.getInitialState(), savedNames: get().strategies.map((x) => x.name) });
-      useCopilot.getState().newChat();
+      // a new strategy starts a new empty chat; the old one keeps its chats
+      useCopilot.getState().openStrategy(`untitled-${uid()}`);
       useCanvas.setState({ codeOnly: false });
       useCanvas.getState().load(emptyStrategy());
       useBacktest.getState().set({ setups: [], activeId: 'compare', strategyChange: null, run: null });
@@ -177,6 +181,8 @@ export const useLibrary = create<LibraryState>((set, get) => {
       for (let i = 2; taken.has(name.toLowerCase()); i++) name = `${s.name} copy ${i}`;
       const copy: SavedStrategy = { ...s, id: uid(), name, updatedAt: Date.now(), live: 0, forwardTests: 0 };
       set((st) => ({ strategies: [copy, ...st.strategies], menuId: null, expanded: st.expanded.includes(s.indexSymbol) ? st.expanded : [...st.expanded, s.indexSymbol] }));
+      // notes are copied (not the chats), and the copy knows where it came from
+      useCopilot.getState().copyNotes(id, copy.id, s.name);
       toast(`Duplicated as “${name}”`);
     },
 
@@ -186,6 +192,9 @@ export const useLibrary = create<LibraryState>((set, get) => {
       if (!s || s.live + s.forwardTests > 0) return;
       const wasOpen = get().openId === id;
       set((st) => ({ strategies: st.strategies.filter((x) => x.id !== id), confirmDeleteId: null, menuId: null, openId: wasOpen ? null : st.openId }));
+      // its Copilot chats and notes go too (the confirm says so)
+      useCopilot.getState().forgetStrategy(id);
+      if (wasOpen) useCopilot.getState().openStrategy(null);
       // deleting the open strategy leaves the builder with a fresh, untitled one
       if (wasOpen) useStrategy.setState({ ...useStrategy.getInitialState(), savedNames: get().strategies.map((x) => x.name) });
       toast(`Deleted “${s.name}”`);
