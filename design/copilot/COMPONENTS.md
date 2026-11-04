@@ -7,6 +7,7 @@ The source of truth is the four canvas boards in `reference/`. Each comes as `.h
 | `cp-components.html` | 0 Principles · 1 Atoms · 2 Molecules |
 | `cp-components-2.html` | 3 The AI card (all states) · 4 On the canvas · 5 The panel |
 | `cp-main-flow.html` | 3a · With Copilot: idea → understood → on canvas → check on chart (6 steps) |
+| `cp-conversations.html` | Chat history and how chats map to strategies. Read `CONVERSATIONS.md`. |
 | `cp-build-fixes.html` | What the PR #12 build gets wrong, next to the design. Read `FIXES.md`. |
 | `cp-refine-edge-cases.html` | 3a · Refine and stay in sync (3 steps) · Copilot edge cases (6 cases) |
 
