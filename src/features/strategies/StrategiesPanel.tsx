@@ -4,6 +4,7 @@ import { Popover } from '@/components/ui/Popover';
 import { INDEXES } from '@/mock/savedStrategies';
 import { RemembersPanel } from '@/features/copilot/Remembers';
 import { useCopilot } from '@/store/copilot';
+import { usePine } from '@/store/pine';
 import { indexOrder, nameError, useLibrary } from '@/store/library';
 import { useStrategy } from '@/store/strategy';
 import { DeleteConfirm, RowMenu } from './menus';
@@ -168,6 +169,8 @@ function ConnectedRow({ id, symbol, moveFocus }: { id: string; symbol: string; m
   const chats = useCopilot((st) => st.chats.filter((c) => c.strategyId === id).length);
   const [remembers, setRemembers] = useState(false);
   const unsaved = useStrategy((st) => st.dirty);
+  // un-run Pine Script waits as a draft for this strategy (same blue dot)
+  const codeDraft = usePine((p) => !!p.drafts[id] || (p.strategyKey === id && p.code !== p.ran));
   const { openStrategy, rename, duplicate, remove, set, toggleIndex } = useLibrary.getState();
   const [draft, setDraft] = useState(s.name);
   const [error, setError] = useState<string | null>(null);
@@ -214,7 +217,7 @@ function ConnectedRow({ id, symbol, moveFocus }: { id: string; symbol: string; m
       live={s.live}
       forwardTests={s.forwardTests}
       open={isOpen}
-      unsaved={isOpen && unsaved}
+      unsaved={(isOpen && unsaved) || codeDraft}
       inCard
       query={query}
       menuOpen={menuOpen || confirming}

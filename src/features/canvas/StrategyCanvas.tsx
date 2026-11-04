@@ -20,7 +20,8 @@ import { findNode, findParent, fitsIn, flatConditions, heightOf, isInside, level
 import { useCanvas } from '@/store/canvas';
 import type { Condition, Group, Side, StrategyTree } from '@/types/strategy';
 import { useCopilot } from '@/store/copilot';
-import { memoryText, usePine } from '@/store/pine';
+import { lineRanges } from '@/lib/pineParse';
+import { usePine } from '@/store/pine';
 import { CardAction, FitBadge, Secondary } from '@/features/copilot/parts';
 import { CopilotPreviewRows, DragCopy, TreeRow } from './CanvasTree';
 import { useDragState } from './dragState';
@@ -242,7 +243,7 @@ function CanvasSelectionBar({ ids }: { ids: string[] }) {
  */
 function CodeOnlyCard() {
   const { openLine, checkOnChart } = useCopilot.getState();
-  const memory = usePine(memoryText);
+  const memory = lineRanges(usePine((s) => s.memoryLines));
   const first = usePine((s) => s.memoryLines[0] ?? 1);
   return (
     <div className="absolute top-16 left-1/2 flex w-[420px] -translate-x-1/2 flex-col overflow-hidden rounded-card border border-border-control bg-surface shadow-surface">
@@ -252,7 +253,7 @@ function CodeOnlyCard() {
         <FitBadge kind="code" />
       </div>
       <p className="m-0 px-3 pb-3 text-chip leading-[18px] text-text-secondary">
-        This strategy uses memory between candles{memory ? ` (line${memory.includes(',') || memory.includes('–') ? 's' : ''} ${memory})` : ''}, which blocks can’t show. Change it in Pine Script; the chart still shows every trade.
+        This strategy keeps memory between candles{memory ? ` (line${memory.includes(',') || memory.includes('–') ? 's' : ''} ${memory})` : ''}, which blocks can’t show. Edit it in code; the chart still shows every trade.
       </p>
       <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-2.5">
         <CardAction onClick={() => openLine(first)}>Edit in code</CardAction>

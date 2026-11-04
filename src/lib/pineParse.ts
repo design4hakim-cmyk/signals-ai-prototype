@@ -239,6 +239,11 @@ export function findProblems(code: string, hints: CanvasHints = { lengths: {} })
           explain: 'This changes when trades fire, so AI won’t pick for you.',
           options: [
             { label: `${canvas} · matches canvas`, suggested: true, line: raw.slice(0, tok.at) + canvas + raw.slice(tok.at + tok.v.length) },
+            // the other lengths of the same indicator in the script
+            ...[...new Set([...names].filter((n) => n !== target && n.startsWith(target.replace(/\d+$/, '')) && /\d+$/.test(n)).map((n) => Number(n.match(/\d+$/)![0])))]
+              .filter((v) => v !== canvas)
+              .slice(0, 1)
+              .map((v) => ({ label: String(v), line: raw.slice(0, tok.at) + v + raw.slice(tok.at + tok.v.length) })),
             { label: 'Add an input', hint: `${tok.v} = input.int(${canvas}, "Length")`, line: `${tok.v} = input.int(${canvas}, "Length")\n${raw}` },
           ],
         });

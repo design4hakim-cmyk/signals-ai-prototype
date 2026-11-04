@@ -158,6 +158,8 @@ const clearCanvas = () => {
   if (!flatConditions(C().entry).length && !flatConditions(C().exit).length) return;
   C().copilotCommit({ entry: { ...C().entry, children: [] }, exit: { ...C().exit, children: [] } }, 'Copilot started a new strategy');
 };
+/** ✦ toast on the canvas, except in the Pine Script view (no toasts there: the status line says it). */
+const toastAi = (text: string) => { if (useCopilot.getState().view !== 'pine') C().showToast(text, true, 'ai'); };
 const findCond = (pred: (c: Condition) => boolean) => [...flatConditions(C().entry), ...flatConditions(C().exit)].find(pred);
 
 /** A plain answer in words, from what's on the canvas now. */
@@ -219,6 +221,11 @@ export const useCopilot = create<CopilotState>((set, get) => {
   const add = (m: Message) => set((s) => ({ messages: [...s.messages, m.kind === 'live' ? m : { ...m, at: Date.now() }] }));
   const card = (c: Card) => {
     set({ typing: false });
+    // asked from the Pine Script editor and answered in words: the answer is in the chat
+    const pine = usePine.getState();
+    if (pine.asking && (c.kind === 'note' || c.kind === 'answer' || c.kind === 'vague')) {
+      pine.set({ asking: false, copilotEditing: false, log: [...pine.log.slice(-5), { id: Date.now(), time: new Date().toLocaleTimeString('en-GB', { hour12: false }), text: 'Copilot replied in Chat', tone: 'muted' }] });
+    }
     add({ kind: 'card', id: c.id, card: c });
   };
   const patch = (id: string, p: Partial<Card>) =>
@@ -232,8 +239,7 @@ export const useCopilot = create<CopilotState>((set, get) => {
   const markPine = (note: string) => {
     const before = usePine.getState().ran;
     queueMicrotask(() => {
-      const last = [...get().messages].reverse().find((m) => m.kind === 'card' && 'mark' in m.card);
-      usePine.getState().copilotChanged(before, note, () => last && get().undo(last.id));
+      usePine.getState().copilotChanged(before, note);
     });
   };
 
@@ -249,11 +255,11 @@ export const useCopilot = create<CopilotState>((set, get) => {
       });
     const step = (i: number) => {
       if (i >= conds.length) {
-        markPine(side === 'entry' ? 'entry conditions' : 'exit');
+        markPine(side === 'entry' ? 'added the entry' : 'added the exit');
         const placeholder = C().copilotPreview?.placeholder ?? null;
         C().copilotAdd(side, conds.slice(from), `Copilot added ${conds.length - from} ${side} condition${conds.length - from > 1 ? 's' : ''}`);
         C().set({ copilotPreview: placeholder ? { side: placeholder, rows: [], placeholder } : null });
-        C().showToast(`Added ${conds.length - from} ${side} condition${conds.length - from > 1 ? 's' : ''}`, true, 'ai');
+        toastAi(`Added ${conds.length - from} ${side} condition${conds.length - from > 1 ? 's' : ''}`);
         done();
         return;
       }
@@ -297,10 +303,10 @@ export const useCopilot = create<CopilotState>((set, get) => {
       patch(id, { exit, phase: 'building', placed: 0 } as Partial<Card>);
       C().set({ copilotPreview: { side: 'exit', rows: [{ kind: 'ghost', cond: exit }], placeholder: null } });
       later(TIMING.place, () => {
-        markPine('exit');
+        markPine('added the exit');
         C().copilotAdd('exit', [exit], 'Copilot added the exit');
         C().set({ copilotPreview: null });
-        C().showToast('Added the exit', true, 'ai');
+        toastAi('Added the exit');
         patch(id, { phase: 'ready', placed: c.entry.length, counts: countsNow() } as Partial<Card>);
       });
     } else {
@@ -361,14 +367,14 @@ export const useCopilot = create<CopilotState>((set, get) => {
           const before = countsNow();
           later(TIMING.understood, () => {
             const mark = C().history.length;
-            markPine('exit');
+            markPine('added the exit');
             C().copilotAdd('exit', [exit], 'Copilot added an exit');
             // the exit is set now, so an earlier "How should it exit?" is answered
             if (open && open.kind === 'card') {
               C().set({ copilotPreview: null });
               patch(open.id, { question: null } as Partial<Card>);
             }
-            C().showToast('Added 1 condition to Exit', true, 'ai');
+            toastAi('Added 1 condition to Exit');
             card({ kind: 'refineAdd', id, side: 'exit', added: exit, before, after: countsNow(), mark });
           });
           return;
@@ -380,9 +386,9 @@ export const useCopilot = create<CopilotState>((set, get) => {
           const added = volumeFilter();
           later(TIMING.understood, () => {
             const mark = C().history.length;
-            markPine('volume filter');
+            markPine('added a volume filter');
             C().copilotAdd('entry', [added], 'Copilot added a volume filter to Entry');
-            C().showToast('Added 1 condition to Entry', true, 'ai');
+            toastAi('Added 1 condition to Entry');
             card({ kind: 'refineAdd', id, side: 'entry', added: findCond((c) => c.left?.type === 'indicator' && c.left.id === 'volume') ?? added, before, after: countsNow(), mark });
           });
           return;
@@ -409,7 +415,7 @@ export const useCopilot = create<CopilotState>((set, get) => {
         case 'codeOnly':
           return later(TIMING.understood, () => {
             C().set({ copilotPreview: null });
-            usePine.getState().copilotCode(CODE_ONLY.replace('EMA 9/21 + RSI Trend', strategyName()), 'runs from code');
+            usePine.getState().copilotCode(CODE_ONLY.replace('EMA 9/21 + RSI Trend', strategyName()), 'wrote a code-only strategy');
             card({ kind: 'codeOnly', id });
           });
         case 'failed': {
@@ -476,8 +482,8 @@ export const useCopilot = create<CopilotState>((set, get) => {
         if (node?.kind === 'cond' && node.right?.type === 'number') next = replaceNode(next, node.id, { ...node, right: { ...node.right, value: c.change.to }, copilot: true });
       }
       if (c.removal) next = removeNodes(next, [c.removal.id]);
-      markPine('stricter RSI, volume filter removed');
-      C().copilotCommit(next, 'Copilot applied 2 changes', 'Applied 2 changes');
+      markPine('made RSI stricter and removed the volume filter');
+      C().copilotCommit(next, 'Copilot applied 2 changes', get().view === 'pine' ? undefined : 'Applied 2 changes');
       patch(id, { phase: 'applied' } as Partial<Card>);
     },
     cancelReview: (id) => {
@@ -489,20 +495,20 @@ export const useCopilot = create<CopilotState>((set, get) => {
     buildAnyway: (id) => {
       const mark = C().history.length;
       clearCanvas(); // a new strategy, as one step (Undo brings the old one back)
-      markPine('custom logic');
+      markPine('added custom logic');
       C().copilotAdd('entry', partlyFitsEntry(), 'Copilot added a custom logic entry', 1);
       C().copilotAdd('exit', [rsiExit()], 'Copilot added the exit', 0);
-      C().showToast('Added to canvas · 1 custom block', true, 'ai');
+      toastAi('Added to canvas · 1 custom block');
       // the custom block runs on code, so the counts are the board's
       patch(id, { phase: 'built', counts: { entries: 11, exits: 11 }, mark } as Partial<Card>);
     },
     simplify: (id) => {
       const mark = C().history.length;
       clearCanvas(); // a new strategy, as one step (Undo brings the old one back)
-      markPine('simplified entry');
+      markPine('simplified the entry');
       C().copilotAdd('entry', simplifiedEntry(), 'Copilot added a simplified entry', 1);
       C().copilotAdd('exit', [rsiExit()], 'Copilot added the exit', 0);
-      C().showToast('Added 2 entry conditions', true, 'ai');
+      toastAi('Added 2 entry conditions');
       patch(id, { phase: 'simplified', counts: countsNow(), mark } as Partial<Card>);
     },
 
@@ -563,6 +569,8 @@ export const useCopilot = create<CopilotState>((set, get) => {
 
     openStrategy: (strategyId) => {
       set({ strategyId });
+      // its un-run Pine Script draft comes back with it
+      usePine.getState().switchStrategy(strategyId ?? 'none');
       const last = get().chats.filter((c) => c.strategyId === strategyId && strategyId !== null).sort((a, b) => b.updatedAt - a.updatedAt)[0];
       if (last) get().openChat(last.id);
       else get().newChat();

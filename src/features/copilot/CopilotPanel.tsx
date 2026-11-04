@@ -32,7 +32,24 @@ export function CopilotPanel() {
   const ready = mode === 'backtest' && active?.status === 'current' && active.results && !active.results.noTrades ? active : null;
   const thread = useRef<HTMLDivElement>(null);
   const hasThread = messages.length > 0;
-  const codeDraft = usePine((p) => p.draft);
+  const codeDraft = usePine((p) => p.code !== p.ran);
+  const [codeWidth, setCodeWidth] = useState(() => {
+    try { return Math.min(640, Math.max(440, Number(localStorage.getItem('signals.codeWidth')) || 440)); } catch { return 440; }
+  });
+  const setWidth = (w: number) => {
+    const v = Math.min(640, Math.max(440, Math.round(w)));
+    setCodeWidth(v);
+    try { localStorage.setItem('signals.codeWidth', String(v)); } catch { /* private window: not remembered */ }
+  };
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const x0 = e.clientX;
+    const w0 = codeWidth;
+    const move = (ev: PointerEvent) => setWidth(w0 + (x0 - ev.clientX));
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
   const strategyId = useCopilot((s) => s.strategyId);
   const activeChat = useCopilot((s) => s.chats.find((c) => c.id === s.activeChatId));
   const saved = useLibrary((l) => l.strategies.find((x) => x.id === strategyId));
@@ -99,7 +116,25 @@ export function CopilotPanel() {
   const placeholder = view === 'pine' ? 'Ask about the code, or describe a change…' : building ? 'Copilot is building… you can still type' : 'Describe your strategy or a condition…';
 
   return (
-    <aside aria-label="Signals Copilot" className="flex w-copilot shrink-0 flex-col">
+    <aside aria-label="Signals Copilot" className="relative flex w-copilot shrink-0 flex-col" style={view === 'pine' ? { width: codeWidth } : undefined}>
+      {view === 'pine' && (
+        // drag the edge: 440–640px while in code (back to 440 for Chat), remembered for you
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize the Pine Script view"
+          aria-valuemin={440}
+          aria-valuemax={640}
+          aria-valuenow={codeWidth}
+          tabIndex={0}
+          onPointerDown={startResize}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') setWidth(codeWidth + 20);
+            if (e.key === 'ArrowRight') setWidth(codeWidth - 20);
+          }}
+          className="absolute top-0 bottom-0 -left-1 z-20 w-2 cursor-col-resize outline-none hover:bg-brand-tint focus-visible:bg-brand-tint"
+        />
+      )}
       <div className="flex h-topbar shrink-0 items-center gap-2.5 border-b border-border-divider pr-3 pl-4">
         <Spark size={16} />
         <h2 className="m-0 text-body-lg font-semibold">Signals Copilot</h2>

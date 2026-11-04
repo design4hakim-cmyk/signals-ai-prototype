@@ -137,6 +137,9 @@ interface CanvasState extends StrategyTree {
   showToast: (text: string, undo?: boolean, icon?: 'ai' | 'code') => void;
   /** Run in the Pine Script editor: the canvas redraws to match the code, as one undo step */
   fromCode: (t: StrategyTree, extra: Partial<CanvasState>, description: string) => void;
+  /** blocks a Run just changed: they glow once (1s), instead of a toast */
+  glow: string[];
+  glowOnce: (ids: string[]) => void;
 }
 
 const treeOf = (s: StrategyTree): StrategyTree => ({ entry: s.entry, exit: s.exit });
@@ -152,6 +155,7 @@ const nodeText = (n: StrategyNode | null) =>
 const syncEntry = (t: StrategyTree) => useStrategy.setState({ entry: entryState(t) });
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
+let glowTimer: ReturnType<typeof setTimeout> | undefined;
 
 const empty = emptyStrategy();
 
@@ -393,6 +397,12 @@ export const useCanvas = create<CanvasState>((set, get) => {
     copilotCommit: (next, description, toast) => {
       commit(next, description, { pending: null });
       if (toast) showToast(toast, true, 'ai');
+    },
+    glow: [],
+    glowOnce: (ids) => {
+      clearTimeout(glowTimer);
+      set({ glow: ids });
+      glowTimer = setTimeout(() => set({ glow: [] }), 1000);
     },
     fromCode: (next, extra, description) => commit(next, description, { editor: null, selected: [], pending: null, ...extra }),
     showToast,

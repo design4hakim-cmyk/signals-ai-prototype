@@ -55,6 +55,8 @@ export interface ConditionBlockProps {
   linked?: boolean;
   /** Copilot wants to change this block (dashed blue outline until Apply) */
   pendingChange?: boolean;
+  /** a Pine Script Run just changed it: one soft glow */
+  glow?: boolean;
 }
 
 export function ConditionBlock({
@@ -75,6 +77,7 @@ export function ConditionBlock({
   blockRef,
   linked = false,
   pendingChange = false,
+  glow = false,
 }: ConditionBlockProps) {
   const disabled = look === 'disabled';
   const source = look === 'dragSource' || look === 'ghost';
@@ -104,6 +107,7 @@ export function ConditionBlock({
           disabled ? 'cursor-not-allowed text-text-disabled' : ''
         }`}
       >
+        {glow && <span aria-hidden="true" className="pointer-events-none absolute -inset-px animate-glow rounded-block" />}
         {(look === 'copilot' || look === 'ghost') && (
           <span className="absolute -top-2 -left-2">
             <CopilotBadge />

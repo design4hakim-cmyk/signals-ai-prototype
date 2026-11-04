@@ -374,10 +374,12 @@ export interface BlockMenuActions {
   onDelete?: () => void;
 }
 
-export function BlockMenu({ hoverRow, onDuplicate, onAddBelow, onCopy, onDelete }: { hoverRow?: number } & BlockMenuActions) {
+export function BlockMenu({ hoverRow, onDuplicate, onAddBelow, onCopy, onDelete, onShowInCode }: { hoverRow?: number; onShowInCode?: () => void } & BlockMenuActions) {
   return (
     <MenuSurface width={220} label="Condition actions">
       <Rows>
+        {/* while the Pine Script view is open */}
+        {onShowInCode && <MenuRow onClick={onShowInCode}>Show in code</MenuRow>}
         <MenuRow shortcut="⌘D" state={hoverRow === 0 ? 'hover' : undefined} onClick={onDuplicate}>Duplicate</MenuRow>
         <MenuRow state={hoverRow === 1 ? 'hover' : undefined} onClick={onAddBelow}>Add condition below</MenuRow>
         <MenuRow shortcut="⌘C" state={hoverRow === 2 ? 'hover' : undefined} onClick={onCopy}>Copy as text</MenuRow>

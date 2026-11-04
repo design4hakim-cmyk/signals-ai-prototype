@@ -7,6 +7,7 @@ import { useCanvas, type EditorPart } from '@/store/canvas';
 import { useCopilot } from '@/store/copilot';
 import { usePine } from '@/store/pine';
 import { lineOfVar } from '@/lib/pine';
+import { sourceMap } from '@/lib/pineMap';
 import type { Condition, IndicatorParams, Operand } from '@/types/strategy';
 import { FieldAtom, MathChip } from './kit/atoms';
 import { ConditionBlock, type Joinable } from './kit/ConditionBlock';
@@ -41,6 +42,7 @@ export function CanvasBlock({ cond, joinable, changed }: { cond: Condition; join
  */
 function CustomBlock({ cond }: { cond: Condition }) {
   const linked = useCanvas((s) => s.linkedHover === cond.id);
+  const glowing = useCanvas((s) => s.glow.includes(cond.id));
   const mine = useCanvas((s) => (s.editor?.id === cond.id ? s.editor.part : null));
   const { remove, openEditor, closeEditor } = useCanvas.getState();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: cond.id });
@@ -54,6 +56,7 @@ function CustomBlock({ cond }: { cond: Condition }) {
       label={cond.custom!.text}
       look={isDragging ? 'dragSource' : cond.copilot ? 'copilot' : 'normal'}
       linked={linked}
+      glow={glowing}
       keepControls={mine === 'more'}
       moreSlot={
         <Popover floating align="right" open={mine === 'more'} onClose={closeEditor} trigger={<MoreButton open={mine === 'more'} label="Custom logic actions" onClick={() => (mine === 'more' ? closeEditor() : openEditor(cond.id, 'more'))} />}>
@@ -83,6 +86,8 @@ function Block({ cond: real, joinable, changed }: { cond: Condition; joinable: J
   const proposed = useCanvas((s) => s.pending?.changes[real.id]);
   const removing = useCanvas((s) => !!s.pending?.removals.includes(real.id));
   const linked = useCanvas((s) => s.linkedHover === real.id);
+  const glowing = useCanvas((s) => s.glow.includes(real.id));
+  const inCode = useCopilot((s) => s.view === 'pine');
   const cond = proposed ?? real;
   const editor = useCanvas((s) => s.editor);
   const selected = useCanvas((s) => s.selected.includes(cond.id));
@@ -100,6 +105,7 @@ function Block({ cond: real, joinable, changed }: { cond: Condition; joinable: J
       label={describeCondition(cond)}
       look={isDragging ? 'dragSource' : removing ? 'removing' : halfBuilt ? 'error' : cond.copilot ? 'copilot' : 'normal'}
       linked={linked}
+      glow={glowing}
       pendingChange={!!proposed}
       error={halfBuilt ? 'Finish this condition to update the chart' : undefined}
       selected={selected}
@@ -110,6 +116,7 @@ function Block({ cond: real, joinable, changed }: { cond: Condition; joinable: J
       moreSlot={
         <Popover floating align="right" open={mine === 'more'} onClose={closeEditor} trigger={<MoreButton open={mine === 'more'} onClick={() => (mine === 'more' ? closeEditor() : openEditor(cond.id, 'more'))} />}>
           <BlockMenu
+            onShowInCode={inCode ? () => { closeEditor(); const ls = sourceMap(usePine.getState().code, { entry: useCanvas.getState().entry, exit: useCanvas.getState().exit }).get(cond.id); if (ls?.[0]) usePine.getState().goTo(ls[0]); } : undefined}
             onDuplicate={() => duplicate([cond.id])}
             onAddBelow={() => addBelow(cond.id)}
             onCopy={() => { copyAsText([cond.id]); closeEditor(); }}

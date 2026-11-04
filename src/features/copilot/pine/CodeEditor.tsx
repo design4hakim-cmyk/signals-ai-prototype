@@ -1,6 +1,6 @@
 import { history, historyKeymap, defaultKeymap, indentWithTab, toggleComment } from '@codemirror/commands';
 import { indentUnit } from '@codemirror/language';
-import { EditorState, RangeSet, StateEffect, StateField, type Extension } from '@codemirror/state';
+import { Compartment, EditorState, RangeSet, StateEffect, StateField, Transaction, type Extension } from '@codemirror/state';
 import {
   Decoration, EditorView, GutterMarker, WidgetType, drawSelection, gutter, gutterLineClass, highlightActiveLine,
   highlightActiveLineGutter, keymap, lineNumbers, type DecorationSet,
@@ -15,7 +15,7 @@ import { pine, pineAutocomplete, pineHighlight, pineHover } from './language';
   kit's line states on top: edited, Copilot, error, needs you, not supported, just fixed.
 */
 
-export type LineKind = 'edited' | 'ai' | 'error' | 'needs' | 'unsupported' | 'fixed' | 'step';
+export type LineKind = 'edited' | 'ai' | 'error' | 'needs' | 'unsupported' | 'fixed' | 'step' | 'linked';
 
 export interface Marks {
   lines: { line: number; kind: LineKind }[];
@@ -147,6 +147,8 @@ const theme = EditorView.theme({
   '.cm-l-needs, .cm-l-unsupported': { backgroundColor: 'var(--color-warn-tint) !important' },
   '.cm-l-fixed': { backgroundColor: 'var(--color-buy-tint) !important', boxShadow: 'inset 2px 0 0 var(--color-buy)' },
   '.cm-l-step': { boxShadow: 'inset 2px 0 0 var(--color-brand)' },
+  // the lines of the block you clicked on the canvas
+  '.cm-l-linked': { backgroundColor: 'var(--color-brand-tint)' },
   '.cm-num-ai': { color: 'var(--color-ai-text)', backgroundColor: 'var(--color-ai-tint)' },
   '.cm-num-error': { color: 'var(--color-error)', fontWeight: '600', backgroundColor: 'var(--color-error-bg)' },
   '.cm-num-needs, .cm-num-unsupported': { color: 'var(--color-warn-text)', fontWeight: '600', backgroundColor: 'var(--color-warn-tint)' },
@@ -182,27 +184,60 @@ const theme = EditorView.theme({
 
 export interface CodeEditorProps {
   value: string;
+  /** how the store changed `value`: `local` edits go on the undo stack (AI fix, Discard, Ask box,
+      Load example); `external` patches (the canvas, Copilot from Chat) don't, so ⌘Z rebases around them */
+  source: 'type' | 'local' | 'external';
+  readOnly?: boolean;
   marks: Marks;
   onChange: (code: string) => void;
   /** caret to this line (Open line N, F8, a problem) */
-  focus: { line: number; n: number } | null;
+  focus: { line: number; n: number; quiet?: boolean } | null;
+  /** scroll this line into view without moving the caret (a block clicked on the canvas) */
+  reveal?: { line: number; n: number } | null;
   onRun: () => void;
   onAcceptFix: (line: number) => void;
   onNextProblem: () => void;
   onFind: () => void;
-  onCaret?: (line: number) => void;
+  onCaret?: (line: number, col: number) => void;
+  /** ⌘L: the selected lines go to the Ask box */
+  onAskLines?: (from: number, to: number) => void;
 }
 
-export function CodeEditor({ value, marks, onChange, focus, onRun, onAcceptFix, onNextProblem, onFind, onCaret }: CodeEditorProps) {
+const readOnlyBox = new Compartment();
+const wrapBox = new Compartment();
+
+export function CodeEditor({ value, source, readOnly = false, marks, onChange, focus, reveal, onRun, onAcceptFix, onNextProblem, onFind, onCaret, onAskLines }: CodeEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  const wrapped = useRef(false);
   // the latest callbacks, without rebuilding the editor
-  const cb = useRef({ onChange, onRun, onAcceptFix, onNextProblem, onFind, onCaret });
-  cb.current = { onChange, onRun, onAcceptFix, onNextProblem, onFind, onCaret };
+  const cb = useRef({ onChange, onRun, onAcceptFix, onNextProblem, onFind, onCaret, onAskLines });
+  useEffect(() => {
+    cb.current = { onChange, onRun, onAcceptFix, onNextProblem, onFind, onCaret, onAskLines };
+  });
 
   useEffect(() => {
     const keys = keymap.of([
       { key: 'Mod-Enter', run: () => (cb.current.onRun(), true) },
+      { key: 'Mod-s', preventDefault: true, run: () => (cb.current.onRun(), true) },
+      {
+        key: 'Mod-l',
+        preventDefault: true,
+        run: (v) => {
+          const r = v.state.selection.main;
+          cb.current.onAskLines?.(v.state.doc.lineAt(r.from).number, v.state.doc.lineAt(r.to).number);
+          return true;
+        },
+      },
+      {
+        // ⌥Z: soft wrap on/off (off by default)
+        key: 'Alt-z',
+        run: (v) => {
+          wrapped.current = !wrapped.current;
+          v.dispatch({ effects: wrapBox.reconfigure(wrapped.current ? EditorView.lineWrapping : []) });
+          return true;
+        },
+      },
       { key: 'Mod-/', run: toggleComment },
       { key: 'Mod-.', run: (v) => (cb.current.onAcceptFix(v.state.doc.lineAt(v.state.selection.main.head).number), true) },
       { key: 'F8', run: () => (cb.current.onNextProblem(), true) },
@@ -225,12 +260,18 @@ export function CodeEditor({ value, marks, onChange, focus, onRun, onAcceptFix, 
       pineAutocomplete,
       pineHover,
       marksField,
+      readOnlyBox.of([EditorState.readOnly.of(false), EditorView.editable.of(true)]),
+      wrapBox.of([]),
       keys,
       theme,
       EditorView.updateListener.of((u) => {
-        if (u.docChanged && u.transactions.some((t) => t.isUserEvent('input') || t.isUserEvent('delete') || t.isUserEvent('undo') || t.isUserEvent('redo') || t.isUserEvent('move') || t.isUserEvent('input.complete')))
+        if (u.docChanged && u.transactions.some((t) => !t.isUserEvent('input.store') && (t.isUserEvent('input') || t.isUserEvent('delete') || t.isUserEvent('undo') || t.isUserEvent('redo') || t.isUserEvent('move'))))
           cb.current.onChange(u.state.doc.toString());
-        if (u.selectionSet) cb.current.onCaret?.(u.state.doc.lineAt(u.state.selection.main.head).number);
+        if (u.selectionSet || u.docChanged) {
+          const head = u.state.selection.main.head;
+          const line = u.state.doc.lineAt(head);
+          cb.current.onCaret?.(line.number, head - line.from + 1);
+        }
       }),
       EditorView.contentAttributes.of({ 'aria-label': 'Pine Script code', spellcheck: 'false' }),
     ];
@@ -240,13 +281,26 @@ export function CodeEditor({ value, marks, onChange, focus, onRun, onAcceptFix, 
     // the editor is built once; value and marks arrive through the effects below
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // the store changed the code (AI fix, example, Discard, canvas): put it in, keep the caret line
+  // the store changed the code: only the part that differs goes in, so the caret and scroll stay put
   useEffect(() => {
     const v = view.current;
-    if (!v || v.state.doc.toString() === value) return;
-    const head = Math.min(v.state.selection.main.head, value.length);
-    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: value }, selection: { anchor: head } });
-  }, [value]);
+    if (!v) return;
+    const old = v.state.doc.toString();
+    if (old === value) return;
+    let from = 0;
+    while (from < old.length && from < value.length && old[from] === value[from]) from++;
+    let a = old.length;
+    let b = value.length;
+    while (a > from && b > from && old[a - 1] === value[b - 1]) { a--; b--; }
+    v.dispatch({
+      changes: { from, to: a, insert: value.slice(from, b) },
+      annotations: [Transaction.addToHistory.of(source === 'local'), Transaction.userEvent.of(source === 'local' ? 'input.store' : 'external')],
+    });
+  }, [value, source]);
+
+  useEffect(() => {
+    view.current?.dispatch({ effects: readOnlyBox.reconfigure([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]) });
+  }, [readOnly]);
 
   useEffect(() => {
     view.current?.dispatch({ effects: setMarks.of(marks) });
@@ -254,10 +308,16 @@ export function CodeEditor({ value, marks, onChange, focus, onRun, onAcceptFix, 
 
   useEffect(() => {
     const v = view.current;
+    if (!v || !reveal || reveal.line > v.state.doc.lines) return;
+    v.dispatch({ effects: EditorView.scrollIntoView(v.state.doc.line(reveal.line).from, { y: 'nearest' }) });
+  }, [reveal]);
+
+  useEffect(() => {
+    const v = view.current;
     if (!v || !focus || focus.line > v.state.doc.lines) return;
     const line = v.state.doc.line(focus.line);
     v.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'center' }) });
-    v.focus();
+    if (!focus.quiet) v.focus();
   }, [focus]);
 
   return <div ref={host} className="h-full min-h-0" />;

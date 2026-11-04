@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cond, complexStrategy, demoStrategy, group, groupedStrategy, ind, num } from '@/mock/strategies';
 import { BROKEN_5, CODE_ONLY, NO_ENTRY, NOT_SUPPORTED, ONE_TYPO, PARTLY_FITS, UNDEFINED_LEN } from '@/mock/pine';
 import type { StrategyTree } from '@/types/strategy';
+import { patchCode } from './lineDiff';
 import { pineText } from './pine';
 import { compile, findProblems, shape } from './pineParse';
 
@@ -80,5 +81,25 @@ describe('Pine Script problems (demo scripts)', () => {
     const lines = BROKEN_5.split('\n');
     for (const p of findProblems(BROKEN_5)) lines[p.line - 1] = p.fix?.line ?? p.options![0].line!;
     expect(compile(lines.join('\n')).ok).toBe(true);
+  });
+});
+
+describe('canvas → code patching keeps your code', () => {
+  const before = demoStrategy();
+  const was = pineText(before, 'Test');
+  it('adding a block keeps your comment, names and spacing', () => {
+    const mine = was.replace('// Entry · on candle close', '// Entry · RSI must confirm').replace('ema21 = ', 'ema21   = ');
+    const after = { ...before, entry: { ...before.entry, children: [...before.entry.children, cond(ind('volume'), 'Greater Than', ind('sma', { length: 20, source: 'Volume' }))] } };
+    const out = patchCode(was, mine, pineText(after, 'Test'))!;
+    expect(out).toContain('// Entry · RSI must confirm');
+    expect(out).toContain('ema21   = ');
+    expect(out).toMatch(/volSma20\s*= ta\.sma\(volume, 20\)/);
+    expect(out).toMatch(/longOk = .* and volume > volSma20/);
+  });
+  it('a change to a line you edited is a conflict', () => {
+    const mine = was.replace('rsi > 50', 'rsi > 52');
+    const rsi = before.entry.children[1] as Extract<typeof before.entry.children[number], { kind: 'cond' }>;
+    const after = { ...before, entry: { ...before.entry, children: [before.entry.children[0], { ...rsi, right: { type: 'number' as const, value: 60 } }] } };
+    expect(patchCode(was, mine, pineText(after, 'Test'))).toBeNull();
   });
 });

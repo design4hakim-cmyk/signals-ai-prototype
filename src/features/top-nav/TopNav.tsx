@@ -9,7 +9,8 @@ import type { Period } from '@/types/market';
 import { MoreMenu } from './MoreMenu';
 import { NameField } from './NameField';
 import { RunningTrades } from './RunningTrades';
-import { TradeDialogs } from './TradeDialogs';
+import { TradeDialogs, type TradeDialog } from './TradeDialogs';
+import { usePine } from '@/store/pine';
 
 /*
   Top nav bar (TopNav-Components sheet).
@@ -26,13 +27,17 @@ export function TopNav() {
   const running = useBacktest((s) => s.run !== null);
   const current = resultsCurrent(setups);
   const trading = st.forwardTests.length + st.liveTrades.length > 0;
-  const [dialog, setDialog] = useState<'unsaved' | 'live' | null>(null);
+  const [dialog, setDialog] = useState<TradeDialog>(null);
+  const unrun = usePine((p) => p.code !== p.ran);
 
   const showDraft = st.saved && !trading;
   const canSave = st.entry !== 'empty' && (!st.saved || st.dirty);
 
-  const onUpdate = () => (st.liveTrades.length ? setDialog('live') : st.save());
+  const saveNow = () => (st.saved ? (st.liveTrades.length ? setDialog('live') : st.save()) : st.startNaming());
+  // un-run Pine Script: ask to run it first
+  const onUpdate = () => (unrun ? setDialog('unrunSave') : saveNow());
   const onTrade = () => {
+    if (unrun) return setDialog('unrunTrade');
     if (st.dirty || (!st.saved && st.entry !== 'empty')) return setDialog('unsaved');
     // the same Trade popup as My Strategies' Trade
     useLibrary.setState({ tradeFor: { id: useLibrary.getState().openId, name: st.name ?? 'Untitled strategy' } });
@@ -76,7 +81,7 @@ export function TopNav() {
         {st.saveStatus === 'idle' && canSave && (
           <button
             type="button"
-            onClick={() => (st.saved ? onUpdate() : st.startNaming())}
+            onClick={onUpdate}
             className="h-[30px] shrink-0 rounded-segment-item border border-brand bg-surface px-3 text-body font-medium text-brand hover:bg-brand-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
             {st.saved ? 'Update' : 'Save'}
@@ -108,7 +113,7 @@ export function TopNav() {
         </button>
       </div>
 
-      <TradeDialogs open={dialog} onClose={() => setDialog(null)} />
+      <TradeDialogs open={dialog} onClose={() => setDialog(null)} onSave={saveNow} />
     </header>
   );
 }

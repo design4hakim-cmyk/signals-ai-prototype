@@ -11,8 +11,13 @@ export interface Hunk {
   lines: string[];
 }
 
+/** Lines compare without their spacing: re-aligning "ema9  =" isn't a change. */
+const key = (l: string) => l.replace(/\s+/g, ' ').trim();
+
 /** Longest common subsequence: pairs of matching line indexes. */
-function lcs(a: string[], b: string[]): [number, number][] {
+function lcs(a0: string[], b0: string[]): [number, number][] {
+  const a = a0.map(key);
+  const b = b0.map(key);
   const n = a.length;
   const m = b.length;
   const dp = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
@@ -43,9 +48,7 @@ export function hunks(base: string[], next: string[]): Hunk[] {
 
 /** 1-based lines of `next` that are new or changed compared with `base`. */
 export function changedSince(base: string[], next: string[]): number[] {
-  // spacing doesn't count: re-aligning "ema9  =" after a longer name is added isn't a change
-  const flat = (ls: string[]) => ls.map((l) => l.replace(/\s+/g, ' ').trim());
-  const matched = new Set(lcs(flat(base), flat(next)).map(([, j]) => j));
+  const matched = new Set(lcs(base, next).map(([, j]) => j));
   return next.map((l, j) => (!matched.has(j) && l.trim() ? j + 1 : 0)).filter(Boolean);
 }
 
@@ -55,24 +58,46 @@ export function changeCount(a: string[], b: string[]) {
 }
 
 /**
- * Three-way merge by lines. `mine` = your un-run draft, `theirs` = the code the canvas now writes,
- * both from `base` (the code that last ran). Null when the same lines changed on both sides.
+ * Three-way merge by lines, kept on `mine`: the hunks from `base` to `theirs` are spliced into
+ * `mine` wherever mine still has those base lines untouched. When a hunk lands on a line mine
+ * changed, that's a conflict (1-based lines in mine).
  */
 export function merge3(base: string[], mine: string[], theirs: string[]): { lines: string[] } | { conflict: [number, number] } {
-  const a = hunks(base, mine);
-  const b = hunks(base, theirs);
-  for (const x of a)
-    for (const y of b) {
-      const touch = x.from < y.to && y.from < x.to;
-      const sameSpot = x.from === y.from && (x.to === x.from || y.to === y.from);
-      if (touch || sameSpot) {
-        // report the lines in your draft that collide (1-based)
-        const start = x.from + 1;
-        return { conflict: [start, Math.max(start, start + x.lines.length - 1)] };
+  const bm = new Map(lcs(base, mine));
+  const out = [...mine];
+  for (const h of hunks(base, theirs).sort((p, q) => q.from - p.from)) {
+    let at: number;
+    let len = 0;
+    if (h.to > h.from) {
+      const js: (number | undefined)[] = [];
+      for (let i = h.from; i < h.to; i++) js.push(bm.get(i));
+      if (js.some((j, k) => j === undefined || (k > 0 && j !== js[k - 1]! + 1))) {
+        const near = bm.get(h.from - 1);
+        const line = (near ?? 0) + 2;
+        return { conflict: [line, line + Math.max(0, h.to - h.from - 1)] };
       }
+      at = js[0]!;
+      len = js.length;
+    } else {
+      // an insertion: right after the base line before it (or before the one after it)
+      const before = h.from > 0 ? bm.get(h.from - 1) : -1;
+      if (before === undefined) return { conflict: [h.from, h.from] };
+      at = before + 1;
     }
-  const all = [...a, ...b].sort((p, q) => q.from - p.from);
-  const out = [...base];
-  for (const h of all) out.splice(h.from, h.to - h.from, ...h.lines);
+    out.splice(at, len, ...h.lines);
+  }
   return { lines: out };
 }
+
+/**
+ * Canvas → code, surgically (design/pine-editor §5): the canvas wrote `before`, now writes `after`.
+ * Only the lines that differ between those two go into `code`; the coder's names, comments,
+ * spacing and order stay. Null when a changed line collides with a line the coder changed.
+ */
+export function patchCode(before: string, code: string, after: string): string | null {
+  const m = merge3(before.split('\n'), code.split('\n'), after.split('\n'));
+  return 'lines' in m ? m.lines.join('\n') : null;
+}
+
+/** Lines (1-based) where two versions differ, for "3 lines changed · not run". */
+export const changedCount = (ran: string, draft: string) => changedSince(ran.split('\n'), draft.split('\n')).length + hunks(ran.split('\n'), draft.split('\n')).filter((h) => !h.lines.length).length;
